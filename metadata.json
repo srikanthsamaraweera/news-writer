@@ -1,0 +1,5 @@
+{
+  "name": "Sri Lanka News Trends",
+  "description": "An application that uses Gemini to fetch and display the latest trending news topics in Sri Lanka from the last 24 hours, including source links.",
+  "requestFramePermissions": []
+}
