@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { NewsTopic } from '../types';
 import { generateDetailedSummary } from '../services/geminiService';
 
 interface TopicCardProps {
   topic: NewsTopic;
   index: number;
+  selectedModel: string;
 }
 
 const LinkIcon: React.FC = () => (
@@ -32,21 +33,37 @@ const CheckIcon: React.FC = () => (
 );
 
 
-export const TopicCard: React.FC<TopicCardProps> = ({ topic, index }) => {
+export const TopicCard: React.FC<TopicCardProps> = ({ topic, index, selectedModel }) => {
   const [detailedSummary, setDetailedSummary] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
+  useEffect(() => {
+    setDetailedSummary(null);
+    setError(null);
+    setCopySuccess(false);
+    setIsGenerating(false);
+  }, [selectedModel]);
+
+
   const handleGenerate = async () => {
+    const modelForRequest = selectedModel;
     setIsGenerating(true);
     setError(null);
     try {
-      const summary = await generateDetailedSummary(topic.topic);
+      const summary = await generateDetailedSummary(topic.topic, modelForRequest);
+      if (modelForRequest !== selectedModel) {
+        return;
+      }
       setDetailedSummary(summary);
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        const normalizedMessage = err.message.toLowerCase();
+        const helpfulMessage = normalizedMessage.includes('overload')
+          ? err.message + ' Try another Gemini model from the selector above and retry.'
+          : err.message;
+        setError(helpfulMessage);
       } else {
         setError("An unknown error occurred.");
       }
@@ -149,3 +166,4 @@ export const TopicCard: React.FC<TopicCardProps> = ({ topic, index }) => {
     </div>
   );
 };
+

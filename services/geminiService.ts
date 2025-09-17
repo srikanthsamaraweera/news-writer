@@ -3,15 +3,17 @@ import type { NewsTopic } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
 interface RawNewsTopic {
   topic: string;
   summary: string;
 }
 
-export const fetchTrendingTopics = async (): Promise<NewsTopic[]> => {
+export const fetchTrendingTopics = async (model: string = DEFAULT_GEMINI_MODEL): Promise<NewsTopic[]> => {
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model,
       contents: "List the top 20 trending positive or uplifting news topics in Sri Lanka in the last 24 hours. Focus on stories about progress, achievements, community, or positive developments. Avoid topics related to crime, political conflict, or disasters. For each topic, provide a concise one-sentence summary. IMPORTANT: Your response must be a valid JSON object with a single key 'trends' which is an array of objects. Each object in the array must have two string properties: 'topic' and 'summary'. Do not include any other text, markdown, or explanations outside of the JSON object.",
       config: {
         tools: [{ googleSearch: {} }],
@@ -58,7 +60,7 @@ export const fetchTrendingTopics = async (): Promise<NewsTopic[]> => {
   }
 };
 
-export const generateDetailedSummary = async (topic: string): Promise<string> => {
+export const generateDetailedSummary = async (topic: string, model: string = DEFAULT_GEMINI_MODEL): Promise<string> => {
   try {
     const prompt = `Based on the news topic "${topic}", please perform the following task:
 
@@ -76,7 +78,7 @@ Write a content of 800 words on the topic. The article should:
 - **Your final output must be formatted as a single block of clean, well-structured HTML.** Use appropriate tags like <h1> for the main title, <h2> for subheadings, <p> for paragraphs, and <strong> for important text. Do not wrap the HTML in markdown backticks or any other formatting.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model,
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
