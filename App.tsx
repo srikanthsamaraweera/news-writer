@@ -1,32 +1,44 @@
 import React, { useState, useCallback } from 'react';
-import { fetchTrendingTopics } from './services/geminiService';
+import { fetchTrendingTopics, DEFAULT_GEMINI_MODEL } from './services/geminiService';
 import type { NewsTopic } from './types';
 import { TopicCard } from './components/TopicCard';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorDisplay } from './components/ErrorDisplay';
 
+const GEMINI_MODEL_OPTIONS = [
+  { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+  { label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash' },
+  { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro-latest' },
+  { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash-latest' },
+];
+
 const App: React.FC = () => {
   const [topics, setTopics] = useState<NewsTopic[] | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_GEMINI_MODEL);
 
   const handleFetchTopics = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setTopics(null);
     try {
-      const fetchedTopics = await fetchTrendingTopics();
+      const fetchedTopics = await fetchTrendingTopics(selectedModel);
       setTopics(fetchedTopics);
     } catch (err) {
       if (err instanceof Error) {
-        setError(err.message);
+        const normalizedMessage = err.message.toLowerCase();
+        const helpfulMessage = normalizedMessage.includes('overload')
+          ? err.message + ' Try another Gemini model from the selector below.'
+          : err.message;
+        setError(helpfulMessage);
       } else {
         setError('An unexpected error occurred.');
       }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedModel]);
 
   const renderContent = () => {
     if (isLoading) {
@@ -39,7 +51,7 @@ const App: React.FC = () => {
       return (
         <div className="grid grid-cols-1 gap-6">
           {topics.map((topic, index) => (
-            <TopicCard key={index} topic={topic} index={index} />
+            <TopicCard key={index} topic={topic} index={index} selectedModel={selectedModel} />
           ))}
         </div>
       );
@@ -71,7 +83,22 @@ const App: React.FC = () => {
           </p>
         </header>
 
-        <div className="flex justify-center mb-8">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-4 mb-8">
+          <label className="flex flex-col text-left text-sm text-slate-300">
+            <span className="uppercase tracking-wide text-xs text-slate-400 mb-2">Gemini model</span>
+            <select
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              disabled={isLoading}
+              className="px-4 py-2 rounded-full bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-400 transition-colors duration-200 disabled:opacity-70"
+            >
+              {GEMINI_MODEL_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             onClick={handleFetchTopics}
             disabled={isLoading}
@@ -94,3 +121,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
