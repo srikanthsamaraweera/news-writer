@@ -4,7 +4,6 @@ import { DEFAULT_MODEL } from "../constants/models";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-
 const MODEL_PROMPT = `Imagine yourself as an SEO expert and a world-class content writer. Your primary goal is to provide the **most recent, up-to-the-minute information** on this topic. Use Google Search to find details and developments specifically from the **last 24-48 hours**.
 
 Write a content of 800 words on the topic. The article should:
@@ -44,6 +43,26 @@ const extractGroundingSources = (response: any): GroundingSource[] => {
     .filter((source: GroundingSource) => Boolean(source.uri));
 };
 
+const sanitizeArticleHtml = (rawHtml: string): string => {
+  const withoutDoctype = rawHtml.replace(/<!DOCTYPE[^>]*>/gi, "").trim();
+
+  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
+    return withoutDoctype
+      .replace(/<\/?\s*html[^>]*>/gi, "")
+      .replace(/<\/?\s*body[^>]*>/gi, "")
+      .replace(/<\/?\s*head[^>]*>/gi, "")
+      .replace(/<\/?\s*meta[^>]*>/gi, "")
+      .replace(/<\/?\s*title[^>]*>/gi, "")
+      .trim();
+  }
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(withoutDoctype, "text/html");
+  doc.querySelectorAll("script, style, head, title, meta, link").forEach((node) => node.remove());
+  const sanitized = doc.body.innerHTML.trim();
+  return sanitized || withoutDoctype;
+};
+
 export interface ArticleGenerationParams {
   topic: string;
   model?: string;
@@ -71,7 +90,7 @@ export const generateArticle = async ({
       },
     });
 
-    const html = stripCodeFences(response.text ?? "");
+    const html = sanitizeArticleHtml(stripCodeFences(response.text ?? ""));
     if (!html) {
       throw new Error("The model returned an empty response.");
     }
