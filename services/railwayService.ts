@@ -32,17 +32,31 @@ export const fetchRailwayTopics = async (
   options: FetchRailwayTopicsOptions = {}
 ): Promise<NewsTopic[]> => {
   const { model = DEFAULT_MODEL } = options;
+  const sessionSalt = Math.random().toString(36).slice(2, 10);
+  const thematicEmphases = [
+    "coastal journeys and seaside vistas",
+    "highland escapes and cool-climate adventures",
+    "luxury train experiences and premium comfort",
+    "family-friendly itineraries and gentle excursions",
+    "photography hotspots and dramatic landscapes",
+    "culinary discoveries and station-side flavors",
+    "heritage locomotives and railway history",
+    "wellness getaways and slow travel retreats",
+    "festivals, cultural events, and trackside celebrations",
+    "eco-conscious travel and sustainable initiatives"
+  ];
+  const focusHint = thematicEmphases[Math.floor(Math.random() * thematicEmphases.length)];
 
   try {
     const response = await ai.models.generateContent({
       model,
-      contents: `You are curating ideas for SriLankanRailways.com, a travel and lifestyle magazine about the island's rail network. Generate a JSON object with the single key "trends" that maps to an array containing 30 distinct railway-related topic objects. Each object must include two string fields: "topic" and "summary".
+      contents: `You are curating ideas for SriLankanRailways.com, a travel and lifestyle magazine about the island's rail network. The current session salt is "${sessionSalt}". Use this salt to influence your creative choices so each request with a different salt produces a noticeably different collection of ideas. For this session, place a gentle emphasis on ${focusHint}, while still keeping the overall set diverse.
 
-The topics should be a varied and imaginative mix covering scenic train journeys, luxury or heritage experiences, insider tips, cultural stories along the routes, major stations, history, engineering feats, rail excursions, photography hotspots, dining options, and other stories that would delight tourists and rail enthusiasts alike. It is fine to include timeless or evergreen ideas—these do not need to be recent news.
+Leverage Gemini's Google Search capability together with reputable Sri Lankan news and travel websites to surface timely coverage. Compile 30 distinct railway-related story ideas in a valid JSON object with the single key "trends" that maps to an array of objects. Each object must contain two string fields: "topic" and "summary".
 
-Keep the phrasing engaging and magazine-worthy. Summaries should highlight why the subject appeals to travelers or showcases something special about Sri Lankan railways.
+Order the array in strict descending chronological order: topic 1 should be the most recent development and topic 30 the oldest. If you must reference older evergreen pieces to reach 30 items, place them toward the end. In every summary, mention the relevant timeframe or publication date (e.g., "October 2025", "last week") and briefly explain why the story would appeal to tourists or rail enthusiasts. Do not fabricate future-dated events.
 
-Return only the JSON. Do not wrap it in markdown or add commentary.`,
+Keep the phrasing engaging and magazine-worthy. Return only the JSON. Do not wrap it in markdown or add commentary.`,
       config: {
         tools: [{ googleSearch: {} }],
       },
@@ -74,6 +88,11 @@ Return only the JSON. Do not wrap it in markdown or add commentary.`,
       ...topic,
       sources,
     }));
+
+    for (let i = topicsWithSources.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [topicsWithSources[i], topicsWithSources[j]] = [topicsWithSources[j], topicsWithSources[i]];
+    }
 
     return topicsWithSources;
   } catch (error) {
