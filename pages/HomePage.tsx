@@ -101,11 +101,18 @@ export const HomePage: React.FC = () => {
             {isLoading ? "Fetching..." : "Get News Topics"}
           </button>
           <Link
+            to="/railways"
+            className="inline-flex items-center justify-center px-8 py-3 font-bold text-lg text-slate-900 bg-emerald-400 rounded-full shadow-lg hover:bg-emerald-300 transform hover:scale-105 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-400 focus:ring-opacity-50"
+          >
+            Sri Lankan Railways
+          </Link>
+          <Link
             to="/generate"
             className="inline-flex items-center justify-center px-8 py-3 font-bold text-lg text-cyan-300 border border-cyan-400/60 rounded-full hover:bg-cyan-500/10 transform hover:scale-105 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-cyan-400 focus:ring-opacity-50"
           >
             Manual Article Generator
           </Link>
+
         </div>
 
         <div className="transition-opacity duration-500">{renderContent()}</div>

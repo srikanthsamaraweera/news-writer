@@ -7,6 +7,7 @@ interface TopicCardProps {
   topic: NewsTopic;
   index: number;
   model?: string;
+  generateArticle?: (topic: string, model?: string) => Promise<string>;
 }
 
 const LinkIcon: React.FC = () => (
@@ -33,17 +34,24 @@ const CheckIcon: React.FC = () => (
   </svg>
 );
 
-export const TopicCard: React.FC<TopicCardProps> = ({ topic, index, model = DEFAULT_MODEL }) => {
+export const TopicCard: React.FC<TopicCardProps> = ({
+  topic,
+  index,
+  model = DEFAULT_MODEL,
+  generateArticle,
+}) => {
   const [detailedSummary, setDetailedSummary] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
+  const generate = generateArticle ?? generateDetailedSummary;
+
   const handleGenerate = async () => {
     setIsGenerating(true);
     setError(null);
     try {
-      const summary = await generateDetailedSummary(topic.topic, model);
+      const summary = await generate(topic.topic, model);
       setDetailedSummary(summary);
     } catch (err) {
       if (err instanceof Error) {
