@@ -1,13 +1,45 @@
 ﻿import React, { useState } from 'react';
 import type { NewsTopic } from '../types';
-import { generateDetailedSummary } from '../services/geminiService';
+import { generateDetailedSummary, type GeneratedDetailedArticle } from '../services/geminiService';
 import { DEFAULT_MODEL } from '../constants/models';
+
+const META_DESCRIPTION_MAX_LENGTH = 155;
+
+const htmlToPlainText = (html: string): string =>
+  html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const truncateWithEllipsis = (value: string, maxLength: number): string => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const truncated = value.slice(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  const base = lastSpace > Math.floor(maxLength * 0.6) ? truncated.slice(0, lastSpace) : truncated;
+  return base.replace(/[\s.,;:-]+$/g, '') + '...';
+};
+
+const buildMetaDescription = (keyword: string, articleHtml: string): string => {
+  const plainText = htmlToPlainText(articleHtml);
+  if (!plainText) {
+    return truncateWithEllipsis(keyword, META_DESCRIPTION_MAX_LENGTH);
+  }
+  const keywordPattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+  const hydratedText = keywordPattern.test(plainText) ? plainText : `${keyword}. ${plainText}`;
+  const cleaned = hydratedText.replace(/\s+/g, ' ').trim();
+  return truncateWithEllipsis(cleaned, META_DESCRIPTION_MAX_LENGTH);
+};
 
 interface TopicCardProps {
   topic: NewsTopic;
   index: number;
   model?: string;
-  generateArticle?: (topic: string, model?: string) => Promise<string>;
+  generateArticle?: (topic: string, model?: string) => Promise<GeneratedDetailedArticle>;
 }
 
 const LinkIcon: React.FC = () => (
@@ -41,18 +73,28 @@ export const TopicCard: React.FC<TopicCardProps> = ({
   generateArticle,
 }) => {
   const [detailedSummary, setDetailedSummary] = useState<string | null>(null);
+  const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
+  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
+  const [metaDescription, setMetaDescription] = useState<string | null>(null);
+  const [isMetaCopied, setIsMetaCopied] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
-  const generate = generateArticle ?? generateDetailedSummary;
+  const generate: (topic: string, model?: string) => Promise<GeneratedDetailedArticle> =
+    generateArticle ?? generateDetailedSummary;
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     setError(null);
+    setSeoKeywords([]);
+    setSelectedKeyword(null);
+    setMetaDescription(null);
+    setIsMetaCopied(false);
     try {
-      const summary = await generate(topic.topic, model);
-      setDetailedSummary(summary);
+      const generated = await generate(topic.topic, model);
+      setDetailedSummary(generated.html);
+      setSeoKeywords(generated.seoKeywords);
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -62,6 +104,32 @@ export const TopicCard: React.FC<TopicCardProps> = ({
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleKeywordClick = (keyword: string) => {
+    if (!detailedSummary) {
+      return;
+    }
+    const description = buildMetaDescription(keyword, detailedSummary);
+    setSelectedKeyword(keyword);
+    setMetaDescription(description);
+    setIsMetaCopied(false);
+  };
+
+  const handleCopyMeta = () => {
+    if (!metaDescription) {
+      return;
+    }
+    navigator.clipboard
+      .writeText(metaDescription)
+      .then(() => {
+        setIsMetaCopied(true);
+        window.setTimeout(() => setIsMetaCopied(false), 2000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy meta description: ', err);
+        alert('Failed to copy the meta description.');
+      });
   };
 
   const handleCopyHtml = () => {
@@ -98,6 +166,53 @@ export const TopicCard: React.FC<TopicCardProps> = ({
             <div className="article-content text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: detailedSummary }} />
           ) : (
             <p className="text-slate-300 leading-relaxed min-h-[4em]">{topic.summary}</p>
+          )}
+
+          {seoKeywords.length > 0 && (
+            <div className="mt-4 bg-slate-800/40 border border-emerald-400/30 rounded-lg p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h4 className="text-sm font-semibold text-emerald-200">SEO keyword suggestions</h4>
+                <span className="text-xs text-slate-400">Great for Yoast focus keyphrases</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {seoKeywords.map((keyword, index) => {
+                  const isActive = selectedKeyword === keyword;
+                  return (
+                    <button
+                      type="button"
+                      key={`${keyword}-${index}`}
+                      onClick={() => handleKeywordClick(keyword)}
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition ${
+                        isActive
+                          ? 'border-emerald-300 bg-emerald-500/20 text-emerald-100 shadow-inner shadow-emerald-500/20'
+                          : 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-300/60 hover:bg-emerald-400/25'
+                      }`}
+                    >
+                      {keyword}
+                    </button>
+                  );
+                })}
+              </div>
+              {metaDescription && selectedKeyword && (
+                <div className="mt-3 rounded-xl border border-cyan-400/30 bg-slate-900/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h5 className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Meta description</h5>
+                      <p className="text-[11px] text-slate-400">Crafted for "{selectedKeyword}"</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyMeta}
+                      className="inline-flex items-center rounded-full border border-cyan-300/60 px-3 py-1 text-[11px] font-semibold text-cyan-200 transition hover:bg-cyan-400/10"
+                    >
+                      {isMetaCopied ? 'Copied!' : 'Copy meta'}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-200">{metaDescription}</p>
+                  <p className="mt-2 text-[11px] text-slate-500">{metaDescription.length}/{META_DESCRIPTION_MAX_LENGTH} characters</p>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="mt-4 flex flex-wrap gap-4">

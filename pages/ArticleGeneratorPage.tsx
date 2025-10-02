@@ -6,11 +6,49 @@ import type { GroundingSource } from "../types";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ErrorDisplay } from "../components/ErrorDisplay";
 
+const META_DESCRIPTION_MAX_LENGTH = 155;
+
+const htmlToPlainText = (html: string): string =>
+  html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const truncateWithEllipsis = (value: string, maxLength: number): string => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const truncated = value.slice(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  const base = lastSpace > Math.floor(maxLength * 0.6) ? truncated.slice(0, lastSpace) : truncated;
+  return base.replace(/[\s.,;:-]+$/g, '') + '...';
+};
+
+// Lightweight helper for crafting a Yoast-friendly meta description that references the chosen keyword.
+const buildMetaDescription = (keyword: string, articleHtml: string): string => {
+  const plainText = htmlToPlainText(articleHtml);
+  if (!plainText) {
+    return truncateWithEllipsis(keyword, META_DESCRIPTION_MAX_LENGTH);
+  }
+  const keywordPattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')}\\b`, 'i');
+  const hydratedText = keywordPattern.test(plainText) ? plainText : `${keyword}. ${plainText}`;
+  const cleaned = hydratedText.replace(/\s+/g, ' ').trim();
+  return truncateWithEllipsis(cleaned, META_DESCRIPTION_MAX_LENGTH);
+};
+
+
 export const ArticleGeneratorPage: React.FC = () => {
   const [topic, setTopic] = useState<string>("");
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
   const [sources, setSources] = useState<GroundingSource[]>([]);
+  const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
+  const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
+  const [metaDescription, setMetaDescription] = useState<string | null>(null);
+  const [isMetaCopied, setIsMetaCopied] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
@@ -22,6 +60,14 @@ export const ArticleGeneratorPage: React.FC = () => {
     const timeout = window.setTimeout(() => setCopySuccess(false), 2000);
     return () => window.clearTimeout(timeout);
   }, [copySuccess]);
+
+  useEffect(() => {
+    if (!isMetaCopied) {
+      return;
+    }
+    const timeout = window.setTimeout(() => setIsMetaCopied(false), 2000);
+    return () => window.clearTimeout(timeout);
+  }, [isMetaCopied]);
 
   const isGenerateDisabled = useMemo(() => !topic.trim() || isLoading, [topic, isLoading]);
 
@@ -36,11 +82,16 @@ export const ArticleGeneratorPage: React.FC = () => {
       setError(null);
       setArticleHtml(null);
       setSources([]);
+      setSeoKeywords([]);
+      setSelectedKeyword(null);
+      setMetaDescription(null);
+      setIsMetaCopied(false);
       setCopySuccess(false);
       try {
         const result: GeneratedArticle = await generateArticle({ topic: topic.trim(), model });
         setArticleHtml(result.html);
         setSources(result.sources);
+        setSeoKeywords(result.seoKeywords);
       } catch (err) {
         if (err instanceof Error) {
           setError(err.message);
@@ -66,6 +117,32 @@ export const ArticleGeneratorPage: React.FC = () => {
       setError("Unable to copy the article to your clipboard. Please try manually copying it.");
     }
   }, [articleHtml]);
+
+  const handleKeywordClick = useCallback(
+    (keyword: string) => {
+      if (!articleHtml) {
+        return;
+      }
+      const description = buildMetaDescription(keyword, articleHtml);
+      setSelectedKeyword(keyword);
+      setMetaDescription(description);
+      setIsMetaCopied(false);
+    },
+    [articleHtml]
+  );
+
+  const handleCopyMeta = useCallback(async () => {
+    if (!metaDescription) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(metaDescription);
+      setIsMetaCopied(true);
+    } catch (err) {
+      console.error("Meta copy failed", err);
+      setError("Unable to copy the meta description. Please try again.");
+    }
+  }, [metaDescription]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
@@ -174,6 +251,50 @@ export const ArticleGeneratorPage: React.FC = () => {
                 className="bg-white text-slate-900 rounded-3xl p-6 shadow-inner max-h-[65vh] overflow-y-auto"
                 dangerouslySetInnerHTML={{ __html: articleHtml }}
               />
+              {seoKeywords.length > 0 && (
+                <div className="bg-slate-800/40 border border-emerald-400/40 rounded-2xl p-5">
+                  <h3 className="text-lg font-semibold text-emerald-200">SEO keyword suggestions</h3>
+                  <p className="text-sm text-slate-300 mt-1">Use these as Yoast focus keyphrases.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {seoKeywords.map((keyword, index) => {
+                      const isActive = selectedKeyword === keyword;
+                      return (
+                        <button
+                          type="button"
+                          key={`${keyword}-${index}`}
+                          onClick={() => handleKeywordClick(keyword)}
+                          className={`inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-medium transition ${
+                            isActive
+                              ? 'border-emerald-300 bg-emerald-500/20 text-emerald-100 shadow-inner shadow-emerald-500/20'
+                              : 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200 hover:border-emerald-300/60 hover:bg-emerald-400/20'
+                          }`}
+                        >
+                          {keyword}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {metaDescription && selectedKeyword && (
+                    <div className="mt-4 rounded-2xl border border-cyan-400/40 bg-slate-900/60 p-5">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-sm font-semibold text-cyan-200">Meta description</h4>
+                          <p className="text-xs text-slate-400">Optimised for "{selectedKeyword}"</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyMeta}
+                          className="inline-flex items-center rounded-full border border-cyan-300/60 px-4 py-1.5 text-xs font-semibold text-cyan-200 transition hover:bg-cyan-400/10"
+                        >
+                          {isMetaCopied ? 'Copied!' : 'Copy meta'}
+                        </button>
+                      </div>
+                      <p className="mt-3 text-sm leading-relaxed text-slate-200">{metaDescription}</p>
+                      <p className="mt-2 text-xs text-slate-500">{metaDescription.length}/{META_DESCRIPTION_MAX_LENGTH} characters</p>
+                    </div>
+                  )}
+                </div>
+              )}
               {sources.length > 0 && (
                 <div className="bg-slate-800/30 border border-slate-700 rounded-2xl p-5">
                   <h3 className="text-lg font-semibold text-slate-200">Sources cited by Gemini</h3>
