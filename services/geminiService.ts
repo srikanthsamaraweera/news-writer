@@ -40,7 +40,7 @@ export const fetchTrendingTopics = async (
     const response = await ai.models.generateContent({
       model,
       contents:
-        "List the top 20 trending positive or uplifting news topics in Sri Lanka in the last 24 hours. Focus on stories about progress, achievements, community, or positive developments. Avoid topics related to crime, political conflict, or disasters. For each topic, provide a concise one-sentence summary. IMPORTANT: Your response must be a valid JSON object with a single key 'trends' which is an array of objects. Each object in the array must have two string properties: 'topic' and 'summary'. Do not include any other text, markdown, or explanations outside of the JSON object.",
+        "List the top 20 trending positive or uplifting news topics in Sri Lanka in the last 24 hours. Use google search trends, sri lankan news websites and any other ways to get these topics. Focus on stories about progress, achievements, community, or positive developments. Avoid topics related to crime, political conflict, or disasters. For each topic, provide a concise one-sentence summary. IMPORTANT: Your response must be a valid JSON object with a single key 'trends' which is an array of objects. Each object in the array must have two string properties: 'topic' and 'summary'. Do not include any other text, markdown, or explanations outside of the JSON object.",
       config: {
         tools: [{ googleSearch: {} }],
       },
