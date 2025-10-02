@@ -15,7 +15,7 @@ Write a content of 800 words on the topic. The article should:
 - Comply with all Google AdSense program policies.
 - The content should be true and accurate.
 - Content should relate to Sri Lanka.
-- **Your final output must be formatted as a single block of clean, well-structured HTML.** Use appropriate tags like <h1> for the main title, <h2> for subheadings, <p> for paragraphs, and <strong> for important text. Do not wrap the HTML in markdown backticks or any other formatting.`;
+- Present the final article content in clean, well-structured HTML using tags like <h1>, <h2>, <p>, and <strong>; avoid markdown backticks or extraneous wrappers.`;
 
 const stripCodeFences = (text: string): string => {
   if (!text) {
@@ -30,8 +30,24 @@ const stripCodeFences = (text: string): string => {
 
 const escapeDoubleQuotes = (value: string): string => value.replace(/"/g, '\\"');
 
+const OUTPUT_FORMAT_INSTRUCTIONS = `Return your final answer as a JSON object with exactly two keys: "articleHtml" and "seoKeywords".
+- The "articleHtml" value must contain the full HTML article string suitable for direct rendering.
+- The "seoKeywords" value must be an array of 6 to 10 unique keyword phrases tailored for Yoast SEO; each phrase should be concise (maximum five words).
+- Do not add explanatory text, commentary, or markdown fences outside of the JSON object.`;
+
 const buildPrompt = (topic: string): string =>
-  `Based on the news topic "${escapeDoubleQuotes(topic)}", please perform the following task:\n\n${MODEL_PROMPT}`;
+  `Based on the news topic "${escapeDoubleQuotes(topic)}", please perform the following task:\n\n${MODEL_PROMPT}\n\n${OUTPUT_FORMAT_INSTRUCTIONS}`;
+
+const extractJsonPayload = (text: string): string => {
+  if (!text) {
+    return "";
+  }
+  const fenceMatch = text.match(/```(?:json)?([\s\S]*?)```/i);
+  if (fenceMatch && fenceMatch[1]) {
+    return fenceMatch[1].trim();
+  }
+  return text.trim();
+};
 
 const extractGroundingSources = (response: any): GroundingSource[] => {
   const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
@@ -71,6 +87,7 @@ export interface ArticleGenerationParams {
 export interface GeneratedArticle {
   html: string;
   sources: GroundingSource[];
+  seoKeywords: string[];
 }
 
 export const generateArticle = async ({
@@ -90,14 +107,45 @@ export const generateArticle = async ({
       },
     });
 
-    const html = sanitizeArticleHtml(stripCodeFences(response.text ?? ""));
-    if (!html) {
+    const payloadText = extractJsonPayload(response.text ?? "");
+    if (!payloadText) {
       throw new Error("The model returned an empty response.");
     }
 
+    let parsed: { articleHtml?: string; article_html?: string; seoKeywords?: unknown; seo_keywords?: unknown };
+    try {
+      parsed = JSON.parse(payloadText);
+    } catch {
+      throw new Error("Failed to parse the JSON response from the model. Please try again.");
+    }
+
+    const rawHtml =
+      typeof parsed.articleHtml === "string"
+        ? parsed.articleHtml
+        : typeof parsed.article_html === "string"
+        ? parsed.article_html
+        : "";
+    if (!rawHtml) {
+      throw new Error("The model response did not include an articleHtml value.");
+    }
+
+    const html = sanitizeArticleHtml(stripCodeFences(rawHtml));
+    if (!html) {
+      throw new Error("The model returned an empty article.");
+    }
+
+    const rawKeywords = Array.isArray(parsed.seoKeywords)
+      ? parsed.seoKeywords
+      : Array.isArray(parsed.seo_keywords)
+      ? parsed.seo_keywords
+      : [];
+    const seoKeywords = rawKeywords
+      .map((keyword) => (typeof keyword === "string" ? keyword.trim() : ""))
+      .filter((keyword, index, array) => Boolean(keyword) && array.indexOf(keyword) === index);
+
     const sources = extractGroundingSources(response);
 
-    return { html, sources };
+    return { html, sources, seoKeywords };
   } catch (error) {
     console.error("Error generating manual article:", error);
     if (error instanceof Error) {
