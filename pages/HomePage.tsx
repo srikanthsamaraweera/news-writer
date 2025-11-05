@@ -12,13 +12,14 @@ export const HomePage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
+  const [positiveOnly, setPositiveOnly] = useState<boolean>(false);
 
   const handleFetchTopics = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     setTopics(null);
     try {
-      const fetchedTopics = await fetchTrendingTopics({ model });
+      const fetchedTopics = await fetchTrendingTopics({ model, positiveOnly });
       setTopics(fetchedTopics);
     } catch (err) {
       if (err instanceof Error) {
@@ -29,7 +30,7 @@ export const HomePage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [model]);
+  }, [model, positiveOnly]);
 
   const renderContent = () => {
     if (isLoading) {
@@ -93,6 +94,19 @@ export const HomePage: React.FC = () => {
               ))}
             </select>
           </div>
+          <label
+            htmlFor="positive-only"
+            className="flex items-center gap-2 text-sm font-semibold text-slate-300"
+          >
+            <input
+              id="positive-only"
+              type="checkbox"
+              checked={positiveOnly}
+              onChange={(event) => setPositiveOnly(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-cyan-400 focus:ring-cyan-400"
+            />
+            Positive news only
+          </label>
           <button
             onClick={handleFetchTopics}
             disabled={isLoading}

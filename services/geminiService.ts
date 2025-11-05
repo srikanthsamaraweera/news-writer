@@ -11,6 +11,7 @@ interface RawNewsTopic {
 
 interface FetchTrendingTopicsOptions {
   model?: string;
+  positiveOnly?: boolean;
 }
 
 const jsonFencePattern = /```(json)?([\s\S]*?)```/i;
@@ -51,7 +52,10 @@ Write a content of 800 words on the topic. The article should:
 
 ${OUTPUT_FORMAT_INSTRUCTIONS}`;
 
-
+const positiveQuery =
+  "List the top 20 trending positive or uplifting news topics in Sri Lanka in the last 24 hours. Use google search trends, sri lankan news websites and any other ways to get these topics. Focus on stories about progress, achievements, community, or positive developments. Avoid topics related to crime, political conflict, or disasters. For each topic, provide a concise one-sentence summary. IMPORTANT: Your response must be a valid JSON object with a single key 'trends' which is an array of objects. Each object in the array must have two string properties: 'topic' and 'summary'. Do not include any other text, markdown, or explanations outside of the JSON object.";
+const normalQuery =
+  "List the top 20 trending news topics in Sri Lanka in the last 24 hours. Use google search trends, sri lankan news websites and any other ways to get these topics. For each topic, provide a concise one-sentence summary. IMPORTANT: Your response must be a valid JSON object with a single key 'trends' which is an array of objects. Each object in the array must have two string properties: 'topic' and 'summary'. Do not include any other text, markdown, or explanations outside of the JSON object.";
 
 const extractJsonPayload = (text: string): string => {
   if (!text) {
@@ -88,13 +92,13 @@ const sanitizeArticleHtml = (rawHtml: string): string => {
 export const fetchTrendingTopics = async (
   options: FetchTrendingTopicsOptions = {}
 ): Promise<NewsTopic[]> => {
-  const { model = DEFAULT_MODEL } = options;
+  const { model = DEFAULT_MODEL, positiveOnly = false } = options;
 
   try {
+    const prompt = positiveOnly ? positiveQuery : normalQuery;
     const response = await ai.models.generateContent({
       model,
-      contents:
-        "List the top 20 trending positive or uplifting news topics in Sri Lanka in the last 24 hours. Use google search trends, sri lankan news websites and any other ways to get these topics. Focus on stories about progress, achievements, community, or positive developments. Avoid topics related to crime, political conflict, or disasters. For each topic, provide a concise one-sentence summary. IMPORTANT: Your response must be a valid JSON object with a single key 'trends' which is an array of objects. Each object in the array must have two string properties: 'topic' and 'summary'. Do not include any other text, markdown, or explanations outside of the JSON object.",
+      contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
       },
@@ -178,8 +182,8 @@ export const generateDetailedSummary = async (
       typeof parsed.articleHtml === "string"
         ? parsed.articleHtml
         : typeof parsed.article_html === "string"
-        ? parsed.article_html
-        : "";
+          ? parsed.article_html
+          : "";
     if (!rawHtml) {
       throw new Error("The model response did not include an articleHtml value.");
     }
@@ -192,8 +196,8 @@ export const generateDetailedSummary = async (
     const rawKeywords = Array.isArray(parsed.seoKeywords)
       ? parsed.seoKeywords
       : Array.isArray(parsed.seo_keywords)
-      ? parsed.seo_keywords
-      : [];
+        ? parsed.seo_keywords
+        : [];
     const seoKeywords = rawKeywords
       .map((keyword) => (typeof keyword === "string" ? keyword.trim() : ""))
       .filter((keyword, index, array) => Boolean(keyword) && array.indexOf(keyword) === index);
