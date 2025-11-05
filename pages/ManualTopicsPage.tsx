@@ -10,11 +10,15 @@ import {
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ErrorDisplay } from "../components/ErrorDisplay";
 
+type YoastFields = ManualTopicArticleResult["yoast"];
+
 interface ArticleState {
   isGenerating: boolean;
   data: ManualTopicArticleResult | null;
   error: string | null;
   copySuccess: boolean;
+  activeYoast: YoastFields | null;
+  selectedKeyword: string | null;
 }
 
 const INITIAL_ARTICLE_STATE: ArticleState = {
@@ -22,6 +26,81 @@ const INITIAL_ARTICLE_STATE: ArticleState = {
   data: null,
   error: null,
   copySuccess: false,
+  activeYoast: null,
+  selectedKeyword: null,
+};
+
+const META_DESCRIPTION_MAX_LENGTH = 155;
+
+const htmlToPlainText = (html: string): string =>
+  html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const truncateWithEllipsis = (value: string, maxLength: number): string => {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  const truncated = value.slice(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(" ");
+  const base = lastSpace > Math.floor(maxLength * 0.6) ? truncated.slice(0, lastSpace) : truncated;
+  return base.replace(/[\s.,;:-]+$/g, "") + "...";
+};
+
+const buildMetaDescription = (keyword: string, articleHtml: string): string => {
+  const plainText = htmlToPlainText(articleHtml);
+  if (!plainText) {
+    return truncateWithEllipsis(keyword, META_DESCRIPTION_MAX_LENGTH);
+  }
+  const keywordPattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const hydratedText = keywordPattern.test(plainText) ? plainText : `${keyword}. ${plainText}`;
+  const cleaned = hydratedText.replace(/\s+/g, " ").trim();
+  return truncateWithEllipsis(cleaned, META_DESCRIPTION_MAX_LENGTH);
+};
+
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const ensureTitleContainsKeyword = (keyword: string, baseTitle: string): string => {
+  const safeTitle = baseTitle?.trim() ?? "";
+  if (!safeTitle) {
+    return keyword;
+  }
+  if (safeTitle.toLowerCase().includes(keyword.toLowerCase())) {
+    return safeTitle;
+  }
+  return `${keyword} | ${safeTitle}`;
+};
+
+const deriveYoastFields = (baseYoast: YoastFields, articleHtml: string, keyword: string): YoastFields => {
+  const seoTitle = ensureTitleContainsKeyword(keyword, baseYoast.seoTitle);
+  const metaDescription = buildMetaDescription(keyword, articleHtml);
+  const slugCandidate = slugify(keyword) || slugify(baseYoast.slug) || slugify(baseYoast.focusKeyphrase);
+  const keyphraseSynonyms = Array.from(
+    new Set(
+      [...baseYoast.keyphraseSynonyms, baseYoast.focusKeyphrase]
+        .map((entry) => entry?.trim())
+        .filter((entry): entry is string => Boolean(entry && entry.toLowerCase() !== keyword.toLowerCase()))
+    )
+  );
+  const seoKeywords = Array.from(new Set([keyword, ...baseYoast.seoKeywords]));
+
+  return {
+    seoTitle,
+    focusKeyphrase: keyword,
+    metaDescription,
+    slug: slugCandidate || slugify(seoTitle),
+    keyphraseSynonyms,
+    seoKeywords,
+  };
 };
 
 export const ManualTopicsPage: React.FC = () => {
@@ -53,6 +132,8 @@ export const ManualTopicsPage: React.FC = () => {
         error: null,
         data: null,
         copySuccess: false,
+        activeYoast: null,
+        selectedKeyword: null,
       });
       try {
         const result = await generateManualTopicArticle({ topic: topicTitle, model });
@@ -61,6 +142,8 @@ export const ManualTopicsPage: React.FC = () => {
           data: result,
           error: null,
           copySuccess: false,
+          activeYoast: result.yoast,
+          selectedKeyword: result.yoast.focusKeyphrase,
         });
       } catch (err) {
         setArticleState(index, {
@@ -70,6 +153,8 @@ export const ManualTopicsPage: React.FC = () => {
               ? err.message
               : "An unexpected error occurred while generating the article.",
           copySuccess: false,
+          activeYoast: null,
+          selectedKeyword: null,
         });
       }
     },
@@ -100,6 +185,23 @@ export const ManualTopicsPage: React.FC = () => {
           copySuccess: false,
         });
       }
+    },
+    [articleStates, setArticleState]
+  );
+
+  const handleYoastKeywordClick = useCallback(
+    (index: number, keyword: string) => {
+      const state = articleStates[index];
+      if (!state?.data) {
+        return;
+      }
+
+      const derivedYoast = deriveYoastFields(state.data.yoast, state.data.html, keyword);
+      setArticleState(index, {
+        activeYoast: derivedYoast,
+        selectedKeyword: keyword,
+        error: null,
+      });
     },
     [articleStates, setArticleState]
   );
@@ -216,7 +318,16 @@ export const ManualTopicsPage: React.FC = () => {
               <ul className="mt-4 space-y-4">
                 {topics.map((topic, index) => {
                   const articleState = articleStates[index] ?? INITIAL_ARTICLE_STATE;
-                  const yoast = articleState.data?.yoast;
+                  const activeYoast = articleState.activeYoast ?? articleState.data?.yoast ?? null;
+                  const baseYoast = articleState.data?.yoast ?? null;
+                  const baseKeywords = baseYoast?.seoKeywords ?? [];
+                  const keywordOptions = Array.from(
+                    new Set(
+                      [baseYoast?.focusKeyphrase, ...baseKeywords, ...(activeYoast?.seoKeywords ?? [])].filter(
+                        (entry): entry is string => Boolean(entry)
+                      )
+                    )
+                  );
 
                   return (
                     <li
@@ -286,7 +397,7 @@ export const ManualTopicsPage: React.FC = () => {
                         <p className="mt-3 text-sm text-rose-300">{articleState.error}</p>
                       )}
 
-                      {articleState.data && yoast && (
+                      {articleState.data && activeYoast && (
                         <div className="mt-4 space-y-4">
                           <div
                             className="prose prose-invert max-w-none text-slate-100"
@@ -300,44 +411,57 @@ export const ManualTopicsPage: React.FC = () => {
                             <dl className="mt-3 space-y-3 text-sm text-slate-300">
                               <div>
                                 <dt className="font-semibold text-slate-200">SEO title</dt>
-                                <dd className="mt-1">{yoast.seoTitle}</dd>
+                                <dd className="mt-1">{activeYoast.seoTitle}</dd>
                               </div>
                               <div>
                                 <dt className="font-semibold text-slate-200">Focus keyphrase</dt>
-                                <dd className="mt-1">{yoast.focusKeyphrase}</dd>
+                                <dd className="mt-1">{activeYoast.focusKeyphrase}</dd>
                               </div>
                               <div>
                                 <dt className="font-semibold text-slate-200">Meta description</dt>
-                                <dd className="mt-1">{yoast.metaDescription}</dd>
+                                <dd className="mt-1">{activeYoast.metaDescription}</dd>
                               </div>
                               <div>
                                 <dt className="font-semibold text-slate-200">Slug</dt>
-                                <dd className="mt-1">{yoast.slug}</dd>
+                                <dd className="mt-1">{activeYoast.slug}</dd>
                               </div>
                               <div>
                                 <dt className="font-semibold text-slate-200">Keyphrase synonyms</dt>
                                 <dd className="mt-1">
-                                  {yoast.keyphraseSynonyms.length > 0
-                                    ? yoast.keyphraseSynonyms.join(", ")
+                                  {activeYoast.keyphraseSynonyms.length > 0
+                                    ? activeYoast.keyphraseSynonyms.join(", ")
                                     : "None"}
                                 </dd>
                               </div>
                             </dl>
 
-                            {yoast.seoKeywords.length > 0 && (
+                            {keywordOptions.length > 0 && (
                               <div className="mt-4">
                                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                   Additional SEO keywords
                                 </p>
                                 <div className="mt-2 flex flex-wrap gap-2">
-                                  {yoast.seoKeywords.map((keyword) => (
-                                    <span
-                                      key={keyword}
-                                      className="rounded-full border border-cyan-400/50 px-3 py-1 text-xs font-medium text-cyan-200"
-                                    >
-                                      {keyword}
-                                    </span>
-                                  ))}
+                                  {keywordOptions.map((keyword) => {
+                                    const isSelected =
+                                      articleState.selectedKeyword?.toLowerCase() === keyword.toLowerCase();
+                                    return (
+                                      <button
+                                        key={keyword}
+                                        type="button"
+                                        onClick={() => handleYoastKeywordClick(index, keyword)}
+                                        disabled={articleState.isGenerating}
+                                        className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                                          isSelected
+                                            ? "border-cyan-200 bg-cyan-300 text-slate-900"
+                                            : "border-cyan-400/50 text-cyan-200 hover:bg-cyan-500/10"
+                                        } ${
+                                          articleState.isGenerating ? "cursor-not-allowed opacity-70" : ""
+                                        }`}
+                                      >
+                                        {keyword}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
