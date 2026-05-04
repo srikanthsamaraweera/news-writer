@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "draft-api": "node server/wordpressDraftServer.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server/wordpressDraftServer.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.19.0",

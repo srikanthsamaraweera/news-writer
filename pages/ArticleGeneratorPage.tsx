@@ -1,6 +1,10 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { generateArticle, type GeneratedArticle } from "../services/articleGeneratorService";
+import {
+  createWordPressDraft,
+  type CreatedWordPressDraft,
+} from "../services/wordpressDraftService";
 import { DEFAULT_MODEL, GEMINI_MODEL_OPTIONS } from "../constants/models";
 import type { GroundingSource } from "../types";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -16,6 +20,27 @@ const htmlToPlainText = (html: string): string =>
     .replace(/&nbsp;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+const extractArticleTitle = (html: string, fallbackTitle: string): string => {
+  if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const h1 = doc.querySelector("h1")?.textContent?.trim();
+    if (h1) {
+      return h1;
+    }
+  }
+
+  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1Match?.[1]) {
+    const plainTitle = htmlToPlainText(h1Match[1]);
+    if (plainTitle) {
+      return plainTitle;
+    }
+  }
+
+  return fallbackTitle.trim() || "Untitled article";
+};
 
 const truncateWithEllipsis = (value: string, maxLength: number): string => {
   if (value.length <= maxLength) {
@@ -44,11 +69,14 @@ export const ArticleGeneratorPage: React.FC = () => {
   const [topic, setTopic] = useState<string>("");
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
+  const [generatedTopic, setGeneratedTopic] = useState<string>("");
   const [sources, setSources] = useState<GroundingSource[]>([]);
   const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
   const [metaDescription, setMetaDescription] = useState<string | null>(null);
   const [isMetaCopied, setIsMetaCopied] = useState<boolean>(false);
+  const [isDraftLoading, setIsDraftLoading] = useState<boolean>(false);
+  const [createdDraft, setCreatedDraft] = useState<CreatedWordPressDraft | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
@@ -81,11 +109,13 @@ export const ArticleGeneratorPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       setArticleHtml(null);
+      setGeneratedTopic(topic.trim());
       setSources([]);
       setSeoKeywords([]);
       setSelectedKeyword(null);
       setMetaDescription(null);
       setIsMetaCopied(false);
+      setCreatedDraft(null);
       setCopySuccess(false);
       try {
         const result: GeneratedArticle = await generateArticle({ topic: topic.trim(), model });
@@ -143,6 +173,35 @@ export const ArticleGeneratorPage: React.FC = () => {
       setError("Unable to copy the meta description. Please try again.");
     }
   }, [metaDescription]);
+
+  const handleCreateDraft = useCallback(async () => {
+    if (!articleHtml) {
+      return;
+    }
+
+    setIsDraftLoading(true);
+    setError(null);
+    setCreatedDraft(null);
+
+    try {
+      const title = extractArticleTitle(articleHtml, generatedTopic || topic);
+      const excerpt = metaDescription ?? truncateWithEllipsis(htmlToPlainText(articleHtml), META_DESCRIPTION_MAX_LENGTH);
+      const draft = await createWordPressDraft({
+        title,
+        content: articleHtml,
+        excerpt,
+      });
+      setCreatedDraft(draft);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Unable to create the WordPress draft.");
+      }
+    } finally {
+      setIsDraftLoading(false);
+    }
+  }, [articleHtml, generatedTopic, metaDescription, topic]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
@@ -224,6 +283,14 @@ export const ArticleGeneratorPage: React.FC = () => {
               >
                 {copySuccess ? "Copied!" : "Copy HTML"}
               </button>
+              <button
+                type="button"
+                onClick={handleCreateDraft}
+                disabled={!articleHtml || isLoading || isDraftLoading}
+                className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-6 py-3 text-base font-semibold text-slate-950 shadow-lg shadow-emerald-500/25 transition-all duration-200 hover:bg-emerald-300 disabled:bg-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed"
+              >
+                {isDraftLoading ? "Creating draft..." : "Create Draft"}
+              </button>
             </div>
           </form>
 
@@ -236,6 +303,22 @@ export const ArticleGeneratorPage: React.FC = () => {
           {isLoading && (
             <div className="mt-10 flex justify-center">
               <LoadingSpinner />
+            </div>
+          )}
+
+          {createdDraft && (
+            <div className="mt-8 rounded-2xl border border-emerald-400/50 bg-emerald-500/10 p-5 text-emerald-100">
+              <p className="font-semibold">WordPress draft created{createdDraft.id ? ` #${createdDraft.id}` : ""}.</p>
+              {(createdDraft.editLink || createdDraft.link) && (
+                <a
+                  href={createdDraft.editLink || createdDraft.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex text-sm font-semibold text-emerald-200 underline underline-offset-4 hover:text-emerald-100"
+                >
+                  Open draft in WordPress
+                </a>
+              )}
             </div>
           )}
 
