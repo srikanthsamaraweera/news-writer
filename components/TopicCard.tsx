@@ -1,7 +1,12 @@
 ﻿import React, { useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import type { NewsTopic } from '../types';
 import { generateDetailedSummary, type GeneratedDetailedArticle } from '../services/geminiService';
 import { DEFAULT_MODEL } from '../constants/models';
+import {
+  createWordPressDraft,
+  type CreatedWordPressDraft,
+} from '../services/wordpressDraftService';
 
 const META_DESCRIPTION_MAX_LENGTH = 155;
 
@@ -33,6 +38,27 @@ const buildMetaDescription = (keyword: string, articleHtml: string): string => {
   const hydratedText = keywordPattern.test(plainText) ? plainText : `${keyword}. ${plainText}`;
   const cleaned = hydratedText.replace(/\s+/g, ' ').trim();
   return truncateWithEllipsis(cleaned, META_DESCRIPTION_MAX_LENGTH);
+};
+
+const extractArticleTitle = (html: string, fallbackTitle: string): string => {
+  if (typeof window !== 'undefined' && typeof DOMParser !== 'undefined') {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const h1 = doc.querySelector('h1')?.textContent?.trim();
+    if (h1) {
+      return h1;
+    }
+  }
+
+  const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1Match?.[1]) {
+    const plainTitle = htmlToPlainText(h1Match[1]);
+    if (plainTitle) {
+      return plainTitle;
+    }
+  }
+
+  return fallbackTitle.trim() || 'Untitled article';
 };
 
 interface TopicCardProps {
@@ -72,12 +98,15 @@ export const TopicCard: React.FC<TopicCardProps> = ({
   model = DEFAULT_MODEL,
   generateArticle,
 }) => {
+  const { getToken } = useAuth();
   const [detailedSummary, setDetailedSummary] = useState<string | null>(null);
   const [seoKeywords, setSeoKeywords] = useState<string[]>([]);
   const [selectedKeyword, setSelectedKeyword] = useState<string | null>(null);
   const [metaDescription, setMetaDescription] = useState<string | null>(null);
   const [isMetaCopied, setIsMetaCopied] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isDraftLoading, setIsDraftLoading] = useState<boolean>(false);
+  const [createdDraft, setCreatedDraft] = useState<CreatedWordPressDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
@@ -91,6 +120,7 @@ export const TopicCard: React.FC<TopicCardProps> = ({
     setSelectedKeyword(null);
     setMetaDescription(null);
     setIsMetaCopied(false);
+    setCreatedDraft(null);
     try {
       const generated = await generate(topic.topic, model);
       setDetailedSummary(generated.html);
@@ -144,6 +174,40 @@ export const TopicCard: React.FC<TopicCardProps> = ({
           console.error('Failed to copy HTML: ', err);
           alert('Failed to copy HTML to clipboard.');
         });
+    }
+  };
+
+  const handleCreateDraft = async () => {
+    if (!detailedSummary) {
+      return;
+    }
+
+    setIsDraftLoading(true);
+    setError(null);
+    setCreatedDraft(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        setError('Please sign in before creating a WordPress draft.');
+        return;
+      }
+
+      const draft = await createWordPressDraft({
+        title: extractArticleTitle(detailedSummary, topic.topic),
+        content: detailedSummary,
+        excerpt: metaDescription ?? truncateWithEllipsis(htmlToPlainText(detailedSummary), META_DESCRIPTION_MAX_LENGTH),
+        token,
+      });
+      setCreatedDraft(draft);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Unable to create the WordPress draft.');
+      }
+    } finally {
+      setIsDraftLoading(false);
     }
   };
 
@@ -237,15 +301,41 @@ export const TopicCard: React.FC<TopicCardProps> = ({
             )}
 
             {detailedSummary && !isGenerating && (
-              <button
-                onClick={handleCopyHtml}
-                className="inline-flex items-center px-4 py-2 text-sm font-medium text-emerald-300 bg-emerald-900/50 border border-emerald-800 rounded-md hover:bg-emerald-800/70 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-emerald-500 transition-all duration-200"
-              >
-                {copySuccess ? <CheckIcon /> : <CopyIcon />}
-                {copySuccess ? 'Copied!' : 'Copy HTML'}
-              </button>
+              <>
+                <button
+                  onClick={handleCopyHtml}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-emerald-300 bg-emerald-900/50 border border-emerald-800 rounded-md hover:bg-emerald-800/70 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-emerald-500 transition-all duration-200"
+                >
+                  {copySuccess ? <CheckIcon /> : <CopyIcon />}
+                  {copySuccess ? 'Copied!' : 'Copy HTML'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateDraft}
+                  disabled={isDraftLoading}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-950 bg-emerald-400 border border-emerald-300 rounded-md hover:bg-emerald-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-emerald-400 disabled:bg-slate-600 disabled:border-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  {isDraftLoading ? 'Creating draft...' : 'Create Draft'}
+                </button>
+              </>
             )}
           </div>
+
+          {createdDraft && (
+            <div className="mt-4 rounded-lg border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+              <p className="font-semibold">WordPress draft created{createdDraft.id ? ` #${createdDraft.id}` : ''}.</p>
+              {(createdDraft.editLink || createdDraft.link) && (
+                <a
+                  href={createdDraft.editLink || createdDraft.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 inline-flex font-semibold text-emerald-200 underline underline-offset-4 hover:text-emerald-100"
+                >
+                  Open draft in WordPress
+                </a>
+              )}
+            </div>
+          )}
 
           {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
 

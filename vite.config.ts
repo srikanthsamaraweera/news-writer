@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
       server: {
         proxy: {
           '/api': {
-            target: `http://localhost:${env.WORDPRESS_DRAFT_SERVER_PORT || '8787'}`,
+            target: env.VITE_LOCAL_API_PROXY_TARGET || 'http://127.0.0.1:3000',
             changeOrigin: true,
           },
         },

@@ -4,13 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "api-dev": "node server/localDraftApi.mjs",
     "dev": "vite",
-    "draft-api": "node server/wordpressDraftServer.mjs",
     "build": "vite build",
-    "preview": "vite preview",
-    "start": "node server/wordpressDraftServer.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.4",
+    "@clerk/clerk-react": "^5.61.6",
     "@google/genai": "^1.19.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

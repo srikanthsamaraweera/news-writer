@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
 import { generateArticle, type GeneratedArticle } from "../services/articleGeneratorService";
 import {
@@ -66,6 +67,7 @@ const buildMetaDescription = (keyword: string, articleHtml: string): string => {
 
 
 export const ArticleGeneratorPage: React.FC = () => {
+  const { getToken } = useAuth();
   const [topic, setTopic] = useState<string>("");
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [articleHtml, setArticleHtml] = useState<string | null>(null);
@@ -184,12 +186,19 @@ export const ArticleGeneratorPage: React.FC = () => {
     setCreatedDraft(null);
 
     try {
+      const token = await getToken();
+      if (!token) {
+        setError("Please sign in before creating a WordPress draft.");
+        return;
+      }
+
       const title = extractArticleTitle(articleHtml, generatedTopic || topic);
       const excerpt = metaDescription ?? truncateWithEllipsis(htmlToPlainText(articleHtml), META_DESCRIPTION_MAX_LENGTH);
       const draft = await createWordPressDraft({
         title,
         content: articleHtml,
         excerpt,
+        token,
       });
       setCreatedDraft(draft);
     } catch (err) {
@@ -201,7 +210,7 @@ export const ArticleGeneratorPage: React.FC = () => {
     } finally {
       setIsDraftLoading(false);
     }
-  }, [articleHtml, generatedTopic, metaDescription, topic]);
+  }, [articleHtml, generatedTopic, getToken, metaDescription, topic]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white relative overflow-hidden">
