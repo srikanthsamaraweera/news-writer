@@ -1,6 +1,7 @@
 ﻿import { GoogleGenAI } from "@google/genai";
 import type { NewsTopic } from "../types";
 import { DEFAULT_MODEL } from "../constants/models";
+import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -37,18 +38,16 @@ const OUTPUT_FORMAT_INSTRUCTIONS = `Return your final answer as a JSON object wi
 const buildArticlePrompt = (topic: string): string =>
   `Based on the news topic "${escapeDoubleQuotes(topic)}", please perform the following task:
 
-Imagine yourself as an SEO expert and a world-class content writer. Your primary goal is to provide the **most recent, up-to-the-minute information** on this topic. Use Google Search to find details and developments specifically from the **last 24-48 hours**.
+Act as a rigorous digital news editor. Use Google Search to establish the most recent reliable facts from the last 24-48 hours and verify important claims across reputable sources.
 
-Write a content of 800 words on the topic. The article should:
+Write an original article of about 800 words. The article must:
 - Prioritize the latest facts and events.
-- Score high in SEO.
-- Be completely original and avoid plagiarism.
-- Be written in the style of a professional news reporter or a top-tier blog writer.
-- Be a high-quality article with excellent readability.
+- Never invent facts, quotations, dates, statistics, sources, or Sri Lankan connections.
+- Relate the story to Sri Lanka where the connection is factual and relevant.
 - Comply with all Google AdSense program policies.
-- The content should be true and accurate.
-- Content should relate to Sri Lanka.
-- Present the final article content in clean, well-structured HTML using tags like <h1>, <h2>, <p>, and <strong>; avoid markdown backticks or extraneous wrappers.
+- Present the article in clean body-safe HTML using <h1>, <h2>, <p>, <strong>, <ul>, and <li> where appropriate; do not use markdown or page-level wrappers.
+
+${NEWS_WRITING_STYLE}
 
 ${OUTPUT_FORMAT_INSTRUCTIONS}`;
 

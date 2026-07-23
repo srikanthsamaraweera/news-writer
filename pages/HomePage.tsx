@@ -6,6 +6,7 @@ import type { NewsTopic } from "../types";
 import { TopicCard } from "../components/TopicCard";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ErrorDisplay } from "../components/ErrorDisplay";
+import { useAuth } from "../components/AuthProvider";
 
 export const HomePage: React.FC = () => {
   const [topics, setTopics] = useState<NewsTopic[] | null>(null);
@@ -13,6 +14,17 @@ export const HomePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [positiveOnly, setPositiveOnly] = useState<boolean>(false);
+  const { user, isAuthorized, isLoading: isAuthLoading, isConfigured, login, logout } = useAuth();
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const handleLogin = async () => {
+    setAuthError(null);
+    try {
+      await login();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Google login failed.");
+    }
+  };
 
   const handleFetchTopics = useCallback(async () => {
     setIsLoading(true);
@@ -66,6 +78,27 @@ export const HomePage: React.FC = () => {
         aria-hidden="true"
       />
       <main className="relative max-w-4xl mx-auto">
+        <div className="absolute right-0 top-0 z-10">
+          {!user ? (
+            <button
+              type="button"
+              onClick={handleLogin}
+              disabled={isAuthLoading || !isConfigured}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-slate-800 bg-white rounded-full shadow-md hover:bg-slate-100 disabled:bg-slate-500 disabled:cursor-not-allowed transition"
+            >
+              {isAuthLoading ? "Checking..." : "Admin Sign in"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-slate-200 border border-slate-600 rounded-full hover:bg-slate-800 transition"
+            >
+              Sign out
+            </button>
+          )}
+        </div>
+
         <header className="text-center mb-8">
           <div className="inline-block bg-cyan-500/10 border border-cyan-500/30 rounded-full px-4 py-1 mb-4">
             <p className="text-sm font-medium text-cyan-400">Powered by Gemini</p>
@@ -114,12 +147,14 @@ export const HomePage: React.FC = () => {
           >
             {isLoading ? "Fetching..." : "Get News Topics"}
           </button>
-          <Link
-            to="/railways"
-            className="inline-flex items-center justify-center px-8 py-3 font-bold text-lg text-slate-900 bg-emerald-400 rounded-full shadow-lg hover:bg-emerald-300 transform hover:scale-105 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-400 focus:ring-opacity-50"
-          >
-            Sri Lankan Railways
-          </Link>
+          {isAuthorized && (
+            <Link
+              to="/railways"
+              className="inline-flex items-center justify-center px-8 py-3 font-bold text-lg text-slate-900 bg-emerald-400 rounded-full shadow-lg hover:bg-emerald-300 transform hover:scale-105 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-400 focus:ring-opacity-50"
+            >
+              Sri Lankan Railways
+            </Link>
+          )}
           <Link
             to="/manual-topics"
             className="inline-flex items-center justify-center px-8 py-3 font-bold text-lg text-emerald-200 border border-emerald-300/60 rounded-full hover:bg-emerald-400/10 transform hover:scale-105 transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-emerald-300 focus:ring-opacity-50"
@@ -134,6 +169,18 @@ export const HomePage: React.FC = () => {
           </Link>
 
         </div>
+
+        {!isConfigured && (
+          <p className="mb-6 text-center text-sm text-amber-300">
+            Google login needs Firebase environment variables.
+          </p>
+        )}
+        {user && !isAuthorized && (
+          <p className="mb-6 text-center text-sm text-amber-300">
+            This Google account is not authorized for Sri Lankan Railways.
+          </p>
+        )}
+        {authError && <p className="mb-6 text-center text-sm text-red-300">{authError}</p>}
 
         <div className="transition-opacity duration-500">{renderContent()}</div>
       </main>

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_MODEL } from "../constants/models";
+import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -34,19 +35,18 @@ const OUTPUT_FORMAT_INSTRUCTIONS = `Return your final answer strictly as JSON wi
 - Do not include markdown fences, explanations, or additional keys.`;
 
 const buildPrompt = (topic: string): string =>
-  `You are a senior SEO editor and AdSense compliance specialist. Using the latest information available (last 24-48 hours), craft a 600-word article about "${escapeDoubleQuotes(
+  `You are a rigorous digital news editor. Using Google Search and the latest reliable information available from the last 24-48 hours, craft an original article of about 600 words about "${escapeDoubleQuotes(
     topic
   )}".
 
 Requirements:
-- Article must be 600 words (+/- 5%) and optimized for Google SEO.
-- Maintain near 0% plagiarism and respect all copyright laws.
+- Verify important claims across reputable sources and never invent facts, quotations, dates, statistics, sources, or connections.
 - Ensure full compliance with Google AdSense policies.
-- Keep the tone professional, engaging, and highly readable.
-- Cite developments that are timely and relevant; highlight Sri Lanka connections when applicable.
-- Structure the article with logical headings (H1/H2/H3) and short paragraphs or lists for clarity.
-- Provide strong internal coherence with introductions, transitions, and conclusions.
+- Highlight Sri Lanka connections only when they are factual and relevant.
+- Use body-safe HTML and logical headings only where they help the reader.
 - Deliver Yoast SEO values that are ready to paste into a WordPress post editor.
+
+${NEWS_WRITING_STYLE}
 
 ${OUTPUT_FORMAT_INSTRUCTIONS}`;
 
