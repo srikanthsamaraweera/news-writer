@@ -2,6 +2,7 @@
 import type { NewsTopic } from "../types";
 import { DEFAULT_MODEL } from "../constants/models";
 import type { GeneratedDetailedArticle } from "./geminiService";
+import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
@@ -146,18 +147,19 @@ Keep the phrasing engaging and magazine-worthy. Return only the JSON. Do not wra
 };
 
 const buildRailwayArticlePrompt = (topic: string): string =>
-  `You are an expert travel journalist and SEO specialist writing for SriLankanRailways.com, an online magazine dedicated to Sri Lanka's rail journeys.
+  `You are a rigorous travel journalist writing for SriLankanRailways.com, an online magazine dedicated to Sri Lanka's rail journeys. Use Google Search to verify current details and important factual claims.
 
 Write an original article of roughly 800 words about "${escapeDoubleQuotes(
     topic
-  )}". Prioritize rich storytelling that would inspire tourists while remaining factual and respectful. The article must:
-- Be completely unique and free of plagiarism.
+  )}". Make it useful and engaging while remaining factual and respectful. The article must:
+- Never invent facts, quotations, schedules, fares, dates, statistics, or sources.
 - Feel welcoming to international travelers and local rail enthusiasts alike.
 - Highlight sensory details, cultural context, history, practical tips, and reasons the subject is special.
-- Be structured for outstanding SEO performance without keyword stuffing.
+- Make time-sensitive travel advice explicit and attribute it to a current source.
 - Remain suitable for Google AdSense and family-friendly audiences.
-- Adopt a polished magazine tone consistent with SriLankanRailways.com.
 - Present the final article content in clean, well-structured HTML using tags like <h1>, <h2>, <p>, <strong>, and <ul>/<li>; avoid markdown backticks or extraneous wrappers.
+
+${NEWS_WRITING_STYLE}
 
 ${OUTPUT_FORMAT_INSTRUCTIONS}`;
 

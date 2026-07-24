@@ -2,6 +2,7 @@
 import type { NewsTopic } from '../types';
 import { generateDetailedSummary, type GeneratedDetailedArticle } from '../services/geminiService';
 import { DEFAULT_MODEL } from '../constants/models';
+import { optimizeArticle } from '../services/articleGeneratorService';
 
 const META_DESCRIPTION_MAX_LENGTH = 155;
 
@@ -80,6 +81,9 @@ export const TopicCard: React.FC<TopicCardProps> = ({
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
+  const [optimizationPrompt, setOptimizationPrompt] = useState<string>('');
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [optimizationError, setOptimizationError] = useState<string | null>(null);
 
   const generate: (topic: string, model?: string) => Promise<GeneratedDetailedArticle> =
     generateArticle ?? generateDetailedSummary;
@@ -147,6 +151,34 @@ export const TopicCard: React.FC<TopicCardProps> = ({
     }
   };
 
+  const handleOptimize = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!detailedSummary || !optimizationPrompt.trim()) {
+      setOptimizationError('Enter an instruction for how you want the article changed.');
+      return;
+    }
+
+    setIsOptimizing(true);
+    setOptimizationError(null);
+    try {
+      const result = await optimizeArticle({
+        topic: topic.topic,
+        articleHtml: detailedSummary,
+        instruction: optimizationPrompt.trim(),
+        model,
+      });
+      setDetailedSummary(result.html);
+      setSeoKeywords(result.seoKeywords);
+      setSelectedKeyword(null);
+      setMetaDescription(null);
+      setOptimizationPrompt('');
+    } catch (err) {
+      setOptimizationError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
   return (
     <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-lg p-6 shadow-lg transition-all duration-300 ease-in-out">
       <style>{`
@@ -163,7 +195,31 @@ export const TopicCard: React.FC<TopicCardProps> = ({
           <h3 className="text-xl font-bold text-cyan-400 mb-2">{topic.topic}</h3>
 
           {detailedSummary ? (
-            <div className="article-content text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: detailedSummary }} />
+            <>
+              <div className="article-content text-slate-300 leading-relaxed" dangerouslySetInnerHTML={{ __html: detailedSummary }} />
+              <form onSubmit={handleOptimize} className="mt-5 rounded-xl border border-cyan-400/30 bg-slate-900/50 p-4">
+                <label htmlFor={`optimization-prompt-${index}`} className="text-sm font-semibold text-cyan-200">
+                  Optimize this article
+                </label>
+                <textarea
+                  id={`optimization-prompt-${index}`}
+                  value={optimizationPrompt}
+                  onChange={(event) => setOptimizationPrompt(event.target.value)}
+                  placeholder="e.g. Shorten the introduction and add more verified context"
+                  rows={3}
+                  disabled={isOptimizing}
+                  className="mt-2 w-full resize-y rounded-lg border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-70"
+                />
+                {optimizationError && <p className="mt-2 text-sm text-red-400">{optimizationError}</p>}
+                <button
+                  type="submit"
+                  disabled={!optimizationPrompt.trim() || isOptimizing}
+                  className="mt-3 rounded-full bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                >
+                  {isOptimizing ? 'Optimizing...' : 'Apply optimization'}
+                </button>
+              </form>
+            </>
           ) : (
             <p className="text-slate-300 leading-relaxed min-h-[4em]">{topic.summary}</p>
           )}

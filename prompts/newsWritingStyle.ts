@@ -1,0 +1,13 @@
+export const NEWS_WRITING_STYLE = `Follow this editorial style:
+- Write in a crisp, impartial, internationally accessible news style based on the supplied reference articles, but never copy or closely imitate their wording.
+- Use a specific, natural headline that states the development plainly. Avoid clickbait, hype, title case, and SEO-stuffed wording.
+- Open with a one-sentence lede containing the most important new fact. Follow quickly with why it matters and the essential context.
+- Keep paragraphs short, usually one or two sentences. Prefer plain English, active voice, concrete nouns, and varied sentence lengths.
+- Build the story in descending order of importance: the latest development first, then evidence and reactions, followed by relevant history and wider implications.
+- Attribute claims precisely with natural phrases such as "the ministry said", "according to...", or "he told...". Identify people by role at first mention.
+- Use direct quotations sparingly and only when supported by search sources. Preserve their meaning exactly; never invent, combine, or embellish quotes.
+- Distinguish confirmed facts, allegations, estimates, and opinions. If reliable sources disagree, make that uncertainty clear.
+- Add descriptive H2 subheadings only when they genuinely help a longer article. Do not add a generic "Introduction", "Conclusion", "Key takeaways", FAQ, or repetitive summary.
+- For explanatory or travel features, a restrained human touch and sensory detail are welcome, but facts and clarity still come first.
+- Avoid promotional language, clichés, rhetorical questions, filler, moralising, and phrases such as "in today's fast-paced world", "game-changer", "delve into", and "it remains to be seen".
+- Make SEO unobtrusive: use the main topic naturally in the headline, lede, and where relevant, without keyword stuffing. Editorial readability takes priority.`;

@@ -1,21 +1,20 @@
 ﻿import { GoogleGenAI } from "@google/genai";
 import type { GroundingSource } from "../types";
 import { DEFAULT_MODEL } from "../constants/models";
+import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
-const MODEL_PROMPT = `Imagine yourself as an SEO expert and a world-class content writer. Your primary goal is to provide the **most recent, up-to-the-minute information** on this topic. Use Google Search to find details and developments specifically from the **last 24-48 hours**.
+const MODEL_PROMPT = `Act as a rigorous digital news editor. Use Google Search to establish the most recent reliable facts from the last 24-48 hours and verify important claims across reputable sources.
 
-Write a content of 800 words on the topic. The article should:
+Write an original article of about 800 words. The article must:
 - Prioritize the latest facts and events.
-- Score high in SEO.
-- Be completely original and avoid plagiarism.
-- Be written in the style of a professional news reporter or a top-tier blog writer.
-- Be a high-quality article with excellent readability.
+- Never invent facts, quotations, dates, statistics, sources, or Sri Lankan connections.
+- Relate the story to Sri Lanka where the connection is factual and relevant.
 - Comply with all Google AdSense program policies.
-- The content should be true and accurate.
-- Content should relate to Sri Lanka.
-- Present the final article content in clean, well-structured HTML using tags like <h1>, <h2>, <p>, and <strong>; avoid markdown backticks or extraneous wrappers.`;
+- Present the article in clean body-safe HTML using <h1>, <h2>, <p>, <strong>, <ul>, and <li> where appropriate; do not use markdown or page-level wrappers.
+
+${NEWS_WRITING_STYLE}`;
 
 const stripCodeFences = (text: string): string => {
   if (!text) {
@@ -90,6 +89,57 @@ export interface GeneratedArticle {
   seoKeywords: string[];
 }
 
+interface ArticleOptimizationParams {
+  topic: string;
+  articleHtml: string;
+  instruction: string;
+  model?: string;
+}
+
+const parseGeneratedArticle = (response: any): GeneratedArticle => {
+  const payloadText = extractJsonPayload(response.text ?? "");
+  if (!payloadText) {
+    throw new Error("The model returned an empty response.");
+  }
+
+  let parsed: { articleHtml?: string; article_html?: string; seoKeywords?: unknown; seo_keywords?: unknown };
+  try {
+    parsed = JSON.parse(payloadText);
+  } catch {
+    throw new Error("Failed to parse the JSON response from the model. Please try again.");
+  }
+
+  const rawHtml =
+    typeof parsed.articleHtml === "string"
+      ? parsed.articleHtml
+      : typeof parsed.article_html === "string"
+      ? parsed.article_html
+      : "";
+  if (!rawHtml) {
+    throw new Error("The model response did not include an articleHtml value.");
+  }
+
+  const html = sanitizeArticleHtml(stripCodeFences(rawHtml));
+  if (!html) {
+    throw new Error("The model returned an empty article.");
+  }
+
+  const rawKeywords = Array.isArray(parsed.seoKeywords)
+    ? parsed.seoKeywords
+    : Array.isArray(parsed.seo_keywords)
+    ? parsed.seo_keywords
+    : [];
+  const seoKeywords = rawKeywords
+    .map((keyword) => (typeof keyword === "string" ? keyword.trim() : ""))
+    .filter((keyword, index, array) => Boolean(keyword) && array.indexOf(keyword) === index);
+
+  return {
+    html,
+    seoKeywords,
+    sources: extractGroundingSources(response),
+  };
+};
+
 export const generateArticle = async ({
   topic,
   model = DEFAULT_MODEL,
@@ -107,50 +157,60 @@ export const generateArticle = async ({
       },
     });
 
-    const payloadText = extractJsonPayload(response.text ?? "");
-    if (!payloadText) {
-      throw new Error("The model returned an empty response.");
-    }
-
-    let parsed: { articleHtml?: string; article_html?: string; seoKeywords?: unknown; seo_keywords?: unknown };
-    try {
-      parsed = JSON.parse(payloadText);
-    } catch {
-      throw new Error("Failed to parse the JSON response from the model. Please try again.");
-    }
-
-    const rawHtml =
-      typeof parsed.articleHtml === "string"
-        ? parsed.articleHtml
-        : typeof parsed.article_html === "string"
-        ? parsed.article_html
-        : "";
-    if (!rawHtml) {
-      throw new Error("The model response did not include an articleHtml value.");
-    }
-
-    const html = sanitizeArticleHtml(stripCodeFences(rawHtml));
-    if (!html) {
-      throw new Error("The model returned an empty article.");
-    }
-
-    const rawKeywords = Array.isArray(parsed.seoKeywords)
-      ? parsed.seoKeywords
-      : Array.isArray(parsed.seo_keywords)
-      ? parsed.seo_keywords
-      : [];
-    const seoKeywords = rawKeywords
-      .map((keyword) => (typeof keyword === "string" ? keyword.trim() : ""))
-      .filter((keyword, index, array) => Boolean(keyword) && array.indexOf(keyword) === index);
-
-    const sources = extractGroundingSources(response);
-
-    return { html, sources, seoKeywords };
+    return parseGeneratedArticle(response);
   } catch (error) {
     console.error("Error generating manual article:", error);
     if (error instanceof Error) {
       throw new Error(`Failed to generate article: ${error.message}`);
     }
     throw new Error("An unknown error occurred while generating the article.");
+  }
+};
+
+export const optimizeArticle = async ({
+  topic,
+  articleHtml,
+  instruction,
+  model = DEFAULT_MODEL,
+}: ArticleOptimizationParams): Promise<GeneratedArticle> => {
+  if (!articleHtml.trim() || !instruction.trim()) {
+    throw new Error("The current article and an optimization instruction are required.");
+  }
+
+  const prompt = `Revise the existing article about "${escapeDoubleQuotes(topic)}" by following the user's instruction.
+
+User instruction:
+${instruction.trim()}
+
+Existing article HTML:
+${articleHtml}
+
+Requirements:
+- Return the complete revised article, not a list of suggestions or a partial excerpt.
+- Preserve accurate details and the established editorial style unless the user explicitly asks to change them.
+- Use Google Search to verify any new or time-sensitive factual claims requested by the user.
+- Do not invent facts, quotations, dates, statistics, sources, or connections.
+- Keep body-safe HTML and regenerate SEO keywords so they match the revised article.
+
+${NEWS_WRITING_STYLE}
+
+${OUTPUT_FORMAT_INSTRUCTIONS}`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    return parseGeneratedArticle(response);
+  } catch (error) {
+    console.error("Error optimizing article:", error);
+    if (error instanceof Error) {
+      throw new Error(`Failed to optimize article: ${error.message}`);
+    }
+    throw new Error("An unknown error occurred while optimizing the article.");
   }
 };
