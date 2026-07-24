@@ -1,6 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { generateArticle, type GeneratedArticle } from "../services/articleGeneratorService";
+import { generateArticle, optimizeArticle, type GeneratedArticle } from "../services/articleGeneratorService";
 import { DEFAULT_MODEL, GEMINI_MODEL_OPTIONS } from "../constants/models";
 import type { GroundingSource } from "../types";
 import { LoadingSpinner } from "../components/LoadingSpinner";
@@ -52,6 +52,9 @@ export const ArticleGeneratorPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
+  const [optimizationPrompt, setOptimizationPrompt] = useState<string>("");
+  const [isOptimizing, setIsOptimizing] = useState<boolean>(false);
+  const [optimizationError, setOptimizationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!copySuccess) {
@@ -87,6 +90,8 @@ export const ArticleGeneratorPage: React.FC = () => {
       setMetaDescription(null);
       setIsMetaCopied(false);
       setCopySuccess(false);
+      setOptimizationPrompt("");
+      setOptimizationError(null);
       try {
         const result: GeneratedArticle = await generateArticle({ topic: topic.trim(), model });
         setArticleHtml(result.html);
@@ -103,6 +108,45 @@ export const ArticleGeneratorPage: React.FC = () => {
       }
     },
     [topic, model]
+  );
+
+  const handleOptimize = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!articleHtml || !optimizationPrompt.trim()) {
+        setOptimizationError("Enter an instruction for how you want the article changed.");
+        return;
+      }
+
+      setIsOptimizing(true);
+      setOptimizationError(null);
+      try {
+        const result = await optimizeArticle({
+          topic: topic.trim(),
+          articleHtml,
+          instruction: optimizationPrompt.trim(),
+          model,
+        });
+        setArticleHtml(result.html);
+        setSeoKeywords(result.seoKeywords);
+        if (result.sources.length > 0) {
+          setSources((current) => {
+            const combined = [...current, ...result.sources];
+            return combined.filter(
+              (source, index) => combined.findIndex((candidate) => candidate.uri === source.uri) === index
+            );
+          });
+        }
+        setSelectedKeyword(null);
+        setMetaDescription(null);
+        setOptimizationPrompt("");
+      } catch (err) {
+        setOptimizationError(err instanceof Error ? err.message : "An unexpected error occurred.");
+      } finally {
+        setIsOptimizing(false);
+      }
+    },
+    [articleHtml, optimizationPrompt, topic, model]
   );
 
   const handleCopy = useCallback(async () => {
@@ -251,6 +295,38 @@ export const ArticleGeneratorPage: React.FC = () => {
                 className="bg-white text-slate-900 rounded-3xl p-6 shadow-inner max-h-[65vh] overflow-y-auto"
                 dangerouslySetInnerHTML={{ __html: articleHtml }}
               />
+              <form
+                onSubmit={handleOptimize}
+                className="rounded-2xl border border-cyan-400/40 bg-slate-800/40 p-5"
+              >
+                <label htmlFor="optimization-prompt" className="block text-lg font-semibold text-cyan-200">
+                  Optimize this article
+                </label>
+                <p className="mt-1 text-sm text-slate-400">
+                  Ask for changes such as a stronger headline, shorter paragraphs, more context, or a different length.
+                </p>
+                <textarea
+                  id="optimization-prompt"
+                  value={optimizationPrompt}
+                  onChange={(event) => setOptimizationPrompt(event.target.value)}
+                  placeholder="e.g. Make the opening more direct and reduce the article to 600 words"
+                  rows={4}
+                  disabled={isOptimizing}
+                  className="mt-4 w-full resize-y rounded-2xl border border-slate-700 bg-slate-950/60 p-4 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:cursor-not-allowed disabled:opacity-70"
+                />
+                {optimizationError && (
+                  <p className="mt-2 text-sm text-rose-300" role="alert">
+                    {optimizationError}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  disabled={!optimizationPrompt.trim() || isOptimizing}
+                  className="mt-4 inline-flex items-center justify-center rounded-full bg-cyan-400 px-6 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                >
+                  {isOptimizing ? "Optimizing..." : "Apply optimization"}
+                </button>
+              </form>
               {seoKeywords.length > 0 && (
                 <div className="bg-slate-800/40 border border-emerald-400/40 rounded-2xl p-5">
                   <h3 className="text-lg font-semibold text-emerald-200">SEO keyword suggestions</h3>

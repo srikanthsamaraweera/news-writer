@@ -9,6 +9,7 @@ import {
 } from "../services/manualTopicArticleService";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ErrorDisplay } from "../components/ErrorDisplay";
+import { optimizeArticle } from "../services/articleGeneratorService";
 
 type YoastFields = ManualTopicArticleResult["yoast"];
 
@@ -111,6 +112,7 @@ export const ManualTopicsPage: React.FC = () => {
   const [usedFallback, setUsedFallback] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [articleStates, setArticleStates] = useState<Record<number, ArticleState>>({});
+  const [optimizationPrompts, setOptimizationPrompts] = useState<Record<number, string>>({});
 
   const setArticleState = useCallback(
     (index: number, partial: Partial<ArticleState>) => {
@@ -206,6 +208,51 @@ export const ManualTopicsPage: React.FC = () => {
     [articleStates, setArticleState]
   );
 
+  const handleOptimizeArticle = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>, index: number, topicTitle: string) => {
+      event.preventDefault();
+      const state = articleStates[index];
+      const instruction = optimizationPrompts[index]?.trim();
+      if (!state?.data || !instruction) {
+        setArticleState(index, { error: "Enter an instruction for how you want the article changed." });
+        return;
+      }
+
+      setArticleState(index, { isGenerating: true, error: null, copySuccess: false });
+      try {
+        const result = await optimizeArticle({
+          topic: topicTitle,
+          articleHtml: state.data.html,
+          instruction,
+          model,
+        });
+        const combinedYoast: YoastFields = {
+          ...state.data.yoast,
+          seoKeywords: Array.from(new Set([...result.seoKeywords, ...state.data.yoast.seoKeywords])),
+        };
+        const refreshedYoast = deriveYoastFields(
+          combinedYoast,
+          result.html,
+          state.selectedKeyword || combinedYoast.focusKeyphrase
+        );
+        setArticleState(index, {
+          isGenerating: false,
+          data: { html: result.html, yoast: combinedYoast },
+          activeYoast: refreshedYoast,
+          selectedKeyword: refreshedYoast.focusKeyphrase,
+          error: null,
+        });
+        setOptimizationPrompts((current) => ({ ...current, [index]: "" }));
+      } catch (err) {
+        setArticleState(index, {
+          isGenerating: false,
+          error: err instanceof Error ? err.message : "An unexpected error occurred.",
+        });
+      }
+    },
+    [articleStates, optimizationPrompts, model, setArticleState]
+  );
+
   const handleGenerate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedPrompt = prompt.trim();
@@ -219,6 +266,7 @@ export const ManualTopicsPage: React.FC = () => {
     setTopics(null);
     setUsedFallback(false);
     setArticleStates({});
+    setOptimizationPrompts({});
 
     try {
       const result = await fetchManualTopics({ query: trimmedPrompt, model });
@@ -403,6 +451,39 @@ export const ManualTopicsPage: React.FC = () => {
                             className="prose prose-invert max-w-none text-slate-100"
                             dangerouslySetInnerHTML={{ __html: articleState.data.html }}
                           />
+
+                          <form
+                            onSubmit={(event) => handleOptimizeArticle(event, index, topic.topic)}
+                            className="rounded-xl border border-cyan-400/30 bg-slate-900/60 p-4"
+                          >
+                            <label
+                              htmlFor={`manual-optimization-${index}`}
+                              className="text-sm font-semibold text-cyan-200"
+                            >
+                              Optimize this article
+                            </label>
+                            <textarea
+                              id={`manual-optimization-${index}`}
+                              value={optimizationPrompts[index] ?? ""}
+                              onChange={(event) =>
+                                setOptimizationPrompts((current) => ({
+                                  ...current,
+                                  [index]: event.target.value,
+                                }))
+                              }
+                              placeholder="e.g. Strengthen the headline and make the article more concise"
+                              rows={3}
+                              disabled={articleState.isGenerating}
+                              className="mt-2 w-full resize-y rounded-lg border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400 disabled:opacity-70"
+                            />
+                            <button
+                              type="submit"
+                              disabled={!optimizationPrompts[index]?.trim() || articleState.isGenerating}
+                              className="mt-3 rounded-full bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-600 disabled:text-slate-300"
+                            >
+                              {articleState.isGenerating ? "Optimizing..." : "Apply optimization"}
+                            </button>
+                          </form>
 
                           <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
                             <h4 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
