@@ -1,10 +1,11 @@
-﻿import { GoogleGenAI } from "@google/genai";
+﻿
 import type { NewsTopic } from "../types";
 import { DEFAULT_MODEL } from "../constants/models";
 import type { GeneratedDetailedArticle } from "./geminiService";
 import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
+import { generateGeminiContent } from "./geminiApiClient";
+import { sanitizeGeneratedHtml, toSafeExternalUrl } from "../utils/contentSecurity";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 interface RawNewsTopic {
   topic: string;
@@ -47,23 +48,7 @@ const extractJsonPayload = (text: string): string => {
 };
 
 const sanitizeArticleHtml = (rawHtml: string): string => {
-  const withoutDoctype = rawHtml.replace(/<!DOCTYPE[^>]*>/gi, "").trim();
-
-  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
-    return withoutDoctype
-      .replace(/<\/?\s*html[^>]*>/gi, "")
-      .replace(/<\/?\s*body[^>]*>/gi, "")
-      .replace(/<\/?\s*head[^>]*>/gi, "")
-      .replace(/<\/?\s*meta[^>]*>/gi, "")
-      .replace(/<\/?\s*title[^>]*>/gi, "")
-      .trim();
-  }
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(withoutDoctype, "text/html");
-  doc.querySelectorAll("script, style, head, title, meta, link").forEach((node) => node.remove());
-  const sanitized = doc.body.innerHTML.trim();
-  return sanitized || withoutDoctype;
+  return sanitizeGeneratedHtml(rawHtml);
 };
 
 
@@ -87,7 +72,7 @@ export const fetchRailwayTopics = async (
   const focusHint = thematicEmphases[Math.floor(Math.random() * thematicEmphases.length)];
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent({
       model,
       contents: `You are curating ideas for SriLankanRailways.com, a travel and lifestyle magazine about the island's rail network. The current session salt is "${sessionSalt}". Use this salt to influence your creative choices so each request with a different salt produces a noticeably different collection of ideas. For this session, place a gentle emphasis on ${focusHint}, while still keeping the overall set diverse.
 
@@ -105,7 +90,7 @@ Keep the phrasing engaging and magazine-worthy. Return only the JSON. Do not wra
     const sources =
       groundingMetadata?.groundingChunks
         ?.map((chunk) => ({
-          uri: chunk.web?.uri ?? "",
+          uri: toSafeExternalUrl(chunk.web?.uri ?? "") ?? "",
           title: chunk.web?.title ?? "",
         }))
         .filter((source) => source.uri) ?? [];
@@ -173,7 +158,7 @@ export const generateRailwayArticle = async (
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent({
       model,
       contents: buildRailwayArticlePrompt(topic.trim()),
       config: {

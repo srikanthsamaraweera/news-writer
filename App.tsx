@@ -6,14 +6,14 @@ import { ManualTopicsPage } from "./pages/ManualTopicsPage";
 import { RailwayTopicsPage } from "./pages/RailwayTopicsPage";
 import { useAuth } from "./components/AuthProvider";
 
-const ProtectedRailwayRoute: React.FC = () => {
+const ProtectedRoute: React.FC<React.PropsWithChildren> = ({ children }) => {
   const { isAuthorized, isLoading } = useAuth();
 
   if (isLoading) {
     return <div className="min-h-screen bg-slate-900" aria-label="Checking login" />;
   }
 
-  return isAuthorized ? <RailwayTopicsPage /> : <Navigate to="/" replace />;
+  return isAuthorized ? <>{children}</> : <Navigate to="/" replace />;
 };
 
 const App: React.FC = () => {
@@ -22,7 +22,7 @@ const App: React.FC = () => {
       <Route path="/" element={<HomePage />} />
       <Route path="/generate" element={<ArticleGeneratorPage />} />
       <Route path="/manual-topics" element={<ManualTopicsPage />} />
-      <Route path="/railways" element={<ProtectedRailwayRoute />} />
+      <Route path="/railways" element={<ProtectedRoute><RailwayTopicsPage /></ProtectedRoute>} />
     </Routes>
   );
 };

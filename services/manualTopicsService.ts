@@ -1,8 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_MODEL } from "../constants/models";
 import type { GroundingSource, NewsTopic } from "../types";
+import { generateGeminiContent } from "./geminiApiClient";
+import { toSafeExternalUrl } from "../utils/contentSecurity";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const jsonFencePattern = /```(json)?([\s\S]*?)```/i;
 
@@ -78,7 +78,7 @@ export const fetchManualTopics = async ({
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent({
       model,
       contents: buildManualTopicsPrompt(trimmedQuery),
       config: {
@@ -90,10 +90,10 @@ export const fetchManualTopics = async ({
     const sources: GroundingSource[] =
       groundingMetadata?.groundingChunks
         ?.map((chunk) => ({
-          uri: chunk.web?.uri ?? "",
+          uri: toSafeExternalUrl(chunk.web?.uri ?? "") ?? "",
           title: chunk.web?.title ?? "",
         }))
-        .filter((source) => Boolean(source.uri || source.title)) ?? [];
+        .filter((source) => Boolean(source.uri)) ?? [];
 
     let text = (response.text ?? "").trim();
     const match = text.match(jsonFencePattern);

@@ -18,15 +18,9 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const authorizedEmails = new Set(
-  (import.meta.env.VITE_AUTHORIZED_EMAILS ?? "")
-    .split(",")
-    .map((email: string) => email.trim().toLowerCase())
-    .filter(Boolean),
-);
-
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState(false);
   const [isLoading, setIsLoading] = useState(isGoogleAuthConfigured);
 
   useEffect(() => {
@@ -35,20 +29,32 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       return;
     }
 
-    return onAuthStateChanged(auth, (nextUser) => {
+    return onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
-      setIsLoading(false);
+      setIsAuthorized(false);
+      if (!nextUser) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const token = await nextUser.getIdToken();
+        const response = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setIsAuthorized(response.ok);
+      } catch {
+        setIsAuthorized(false);
+      } finally {
+        setIsLoading(false);
+      }
     });
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      isAuthorized: Boolean(
-        user?.email &&
-          user.emailVerified &&
-          authorizedEmails.has(user.email.toLowerCase()),
-      ),
+      isAuthorized,
       isLoading,
       isConfigured: isGoogleAuthConfigured,
       login: async () => {
@@ -56,7 +62,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       },
       logout: signOutFromGoogle,
     }),
-    [user, isLoading],
+    [user, isAuthorized, isLoading],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
