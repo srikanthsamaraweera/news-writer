@@ -1,9 +1,10 @@
-﻿import { GoogleGenAI } from "@google/genai";
+﻿
 import type { NewsTopic } from "../types";
 import { DEFAULT_MODEL } from "../constants/models";
 import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
+import { generateGeminiContent } from "./geminiApiClient";
+import { sanitizeGeneratedHtml, toSafeExternalUrl } from "../utils/contentSecurity";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 interface RawNewsTopic {
   topic: string;
@@ -69,23 +70,7 @@ const extractJsonPayload = (text: string): string => {
 
 
 const sanitizeArticleHtml = (rawHtml: string): string => {
-  const withoutDoctype = rawHtml.replace(/<!DOCTYPE[^>]*>/gi, "").trim();
-
-  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
-    return withoutDoctype
-      .replace(/<\/?\s*html[^>]*>/gi, "")
-      .replace(/<\/?\s*body[^>]*>/gi, "")
-      .replace(/<\/?\s*head[^>]*>/gi, "")
-      .replace(/<\/?\s*meta[^>]*>/gi, "")
-      .replace(/<\/?\s*title[^>]*>/gi, "")
-      .trim();
-  }
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(withoutDoctype, "text/html");
-  doc.querySelectorAll("script, style, head, title, meta, link").forEach((node) => node.remove());
-  const sanitized = doc.body.innerHTML.trim();
-  return sanitized || withoutDoctype;
+  return sanitizeGeneratedHtml(rawHtml);
 };
 
 export const fetchTrendingTopics = async (
@@ -95,7 +80,7 @@ export const fetchTrendingTopics = async (
 
   try {
     const prompt = positiveOnly ? positiveQuery : normalQuery;
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent({
       model,
       contents: prompt,
       config: {
@@ -107,7 +92,7 @@ export const fetchTrendingTopics = async (
     const sources =
       groundingMetadata?.groundingChunks
         ?.map((chunk) => ({
-          uri: chunk.web?.uri ?? "",
+          uri: toSafeExternalUrl(chunk.web?.uri ?? "") ?? "",
           title: chunk.web?.title ?? "",
         }))
         .filter((source) => source.uri) ?? [];
@@ -157,7 +142,7 @@ export const generateDetailedSummary = async (
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent({
       model,
       contents: buildArticlePrompt(topic.trim()),
       config: {

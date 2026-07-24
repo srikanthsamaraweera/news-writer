@@ -1,8 +1,8 @@
-import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_MODEL } from "../constants/models";
 import { NEWS_WRITING_STYLE } from "../prompts/newsWritingStyle";
+import { generateGeminiContent } from "./geminiApiClient";
+import { sanitizeGeneratedHtml } from "../utils/contentSecurity";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 
 const stripCodeFences = (text: string): string => {
   if (!text) {
@@ -62,21 +62,7 @@ const extractJsonPayload = (text: string): string => {
 };
 
 const sanitizeArticleHtml = (rawHtml: string): string => {
-  const withoutDoctype = rawHtml.replace(/<!DOCTYPE[^>]*>/gi, "").trim();
-
-  if (typeof window === "undefined" || typeof DOMParser === "undefined") {
-    return withoutDoctype
-      .replace(/<\/?\s*html[^>]*>/gi, "")
-      .replace(/<\/?\s*head[^>]*>/gi, "")
-      .replace(/<\/?\s*body[^>]*>/gi, "")
-      .trim();
-  }
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(withoutDoctype, "text/html");
-  doc.querySelectorAll("script, style, head, title, meta, link").forEach((node) => node.remove());
-  const sanitized = doc.body.innerHTML.trim();
-  return sanitized || withoutDoctype;
+  return sanitizeGeneratedHtml(rawHtml);
 };
 
 export interface ManualTopicArticleParams {
@@ -105,7 +91,7 @@ export const generateManualTopicArticle = async ({
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await generateGeminiContent({
       model,
       contents: buildPrompt(topic.trim()),
       config: {

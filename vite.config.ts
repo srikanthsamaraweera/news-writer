@@ -1,17 +1,22 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+export default defineConfig({
+      server: {
+        headers: {
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+          'X-Frame-Options': 'DENY',
+          'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+          'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self' ws: https://*.googleapis.com https://*.firebaseio.com https://securetoken.googleapis.com; frame-src https://accounts.google.com https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'",
+        },
+        proxy: {
+          '/api': 'http://localhost:8787',
+        },
       },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
       }
-    };
 });
