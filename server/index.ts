@@ -18,9 +18,6 @@ const authorizedEmails = new Set(
     .filter(Boolean),
 );
 
-if (!geminiKey) {
-  throw new Error("GEMINI_API_KEY is required by the server.");
-}
 const isAdminAuthConfigured = Boolean(firebaseProjectId && authorizedEmails.size > 0);
 if (isAdminAuthConfigured && getApps().length === 0) {
   initializeApp({ projectId: firebaseProjectId });
@@ -163,6 +160,13 @@ app.post(
   readOptionalAuthorizedUser,
   enforceRateLimit,
   async (request: AuthorizedRequest, response: Response) => {
+    if (!geminiKey) {
+      response.status(503).json({
+        error: "Gemini is not configured on the server.",
+      });
+      return;
+    }
+
     const { model, contents, useGoogleSearch } = request.body ?? {};
     if (typeof model !== "string" || !ALLOWED_MODELS.has(model)) {
       response.status(400).json({ error: "The selected model is not allowed." });
