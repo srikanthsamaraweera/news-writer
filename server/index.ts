@@ -82,6 +82,12 @@ const requireAuthorizedUser = async (
   response: Response,
   next: NextFunction,
 ) => {
+  if (!isAdminAuthConfigured) {
+    response.status(503).json({
+      error: "Administrator authentication is not configured on the server.",
+    });
+    return;
+  }
   const authorization = request.header("authorization");
   if (!authorization?.startsWith("Bearer ")) {
     response.status(401).json({ error: "Authentication is required." });
@@ -95,8 +101,11 @@ const requireAuthorizedUser = async (
       return;
     }
     next();
-  } catch {
-    response.status(401).json({ error: "Your login session is invalid or expired." });
+  } catch (error) {
+    console.error("Firebase token verification failed", error);
+    response.status(401).json({
+      error: "The server could not verify this Firebase login. Check the Firebase project configuration.",
+    });
   }
 };
 

@@ -14,7 +14,15 @@ export const HomePage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const [positiveOnly, setPositiveOnly] = useState<boolean>(false);
-  const { user, isAuthorized, isLoading: isAuthLoading, isConfigured, login, logout } = useAuth();
+  const {
+    user,
+    isAuthorized,
+    isLoading: isAuthLoading,
+    isConfigured,
+    authorizationError,
+    login,
+    logout,
+  } = useAuth();
   const [authError, setAuthError] = useState<string | null>(null);
 
   const handleLogin = async () => {
@@ -177,7 +185,9 @@ export const HomePage: React.FC = () => {
         )}
         {user && !isAuthorized && (
           <p className="mb-6 text-center text-sm text-amber-300">
-            This Google account is not authorized for the railway administration area. Public article generation remains available.
+            {authorizationError ||
+              "This Google account is not authorized for the railway administration area."}{" "}
+            Public article generation remains available.
           </p>
         )}
         {authError && <p className="mb-6 text-center text-sm text-red-300">{authError}</p>}
