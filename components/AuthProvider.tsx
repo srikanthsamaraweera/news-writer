@@ -12,6 +12,7 @@ type AuthContextValue = {
   isAuthorized: boolean;
   isLoading: boolean;
   isConfigured: boolean;
+  authorizationError: string | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -21,6 +22,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [authorizationError, setAuthorizationError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(isGoogleAuthConfigured);
 
   useEffect(() => {
@@ -32,6 +34,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     return onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
       setIsAuthorized(false);
+      setAuthorizationError(null);
       if (!nextUser) {
         setIsLoading(false);
         return;
@@ -43,8 +46,17 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
           headers: { Authorization: `Bearer ${token}` },
         });
         setIsAuthorized(response.ok);
-      } catch {
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null) as { error?: string } | null;
+          setAuthorizationError(
+            payload?.error || `Authorization API returned HTTP ${response.status}.`,
+          );
+        }
+      } catch (error) {
         setIsAuthorized(false);
+        setAuthorizationError(
+          error instanceof Error ? error.message : "The authorization API could not be reached.",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -57,12 +69,13 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
       isAuthorized,
       isLoading,
       isConfigured: isGoogleAuthConfigured,
+      authorizationError,
       login: async () => {
         await signInWithGoogle();
       },
       logout: signOutFromGoogle,
     }),
-    [user, isAuthorized, isLoading],
+    [user, isAuthorized, isLoading, authorizationError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
