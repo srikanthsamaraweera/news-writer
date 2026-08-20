@@ -267,6 +267,10 @@ app.use((request, response, next) => {
   response.sendFile(path.join(distDirectory, "index.html"));
 });
 
-app.listen(port, () => {
-  console.log(`Secure news writer server listening on port ${port}`);
-});
+if (process.env.VERCEL !== "1") {
+  app.listen(port, () => {
+    console.log(`Secure news writer server listening on port ${port}`);
+  });
+}
+
+export default app;
