@@ -19,9 +19,14 @@ const authorizedEmails = new Set(
 );
 
 const isAdminAuthConfigured = Boolean(firebaseProjectId && authorizedEmails.size > 0);
-if (isAdminAuthConfigured && getApps().length === 0) {
-  initializeApp({ projectId: firebaseProjectId });
-}
+
+const getFirebaseAuth = () => {
+  if (!firebaseProjectId) {
+    throw new Error("FIREBASE_PROJECT_ID is not configured.");
+  }
+  const firebaseApp = getApps()[0] ?? initializeApp({ projectId: firebaseProjectId });
+  return getAuth(firebaseApp);
+};
 
 const app = express();
 const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || 0);
@@ -65,7 +70,7 @@ const readAuthorizedUser = async (request: AuthorizedRequest): Promise<boolean> 
     return false;
   }
 
-  const decoded = await getAuth().verifyIdToken(authorization.slice(7));
+  const decoded = await getFirebaseAuth().verifyIdToken(authorization.slice(7));
   const email = decoded.email?.toLowerCase();
   if (!email || !decoded.email_verified || !authorizedEmails.has(email)) {
     return false;
