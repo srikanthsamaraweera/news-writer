@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
 const loadApp = async () => {
-  const module = await import("../server/index");
+  const module = await import("../server/index.js");
   return module.default;
 };
 
