@@ -168,9 +168,17 @@ export const TopicCard: React.FC<TopicCardProps> = ({
         model,
       });
       setDetailedSummary(result.html);
-      setSeoKeywords(result.seoKeywords);
-      setSelectedKeyword(null);
-      setMetaDescription(null);
+      const refreshedKeywords = result.seoKeywords.length > 0 ? result.seoKeywords : seoKeywords;
+      const refreshedSelectedKeyword =
+        (selectedKeyword && refreshedKeywords.includes(selectedKeyword) ? selectedKeyword : null) ??
+        refreshedKeywords[0] ??
+        null;
+      setSeoKeywords(refreshedKeywords);
+      setSelectedKeyword(refreshedSelectedKeyword);
+      setMetaDescription(
+        refreshedSelectedKeyword ? buildMetaDescription(refreshedSelectedKeyword, result.html) : null
+      );
+      setIsMetaCopied(false);
       setOptimizationPrompt('');
     } catch (err) {
       setOptimizationError(err instanceof Error ? err.message : 'An unexpected error occurred.');

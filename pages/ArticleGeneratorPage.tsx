@@ -128,7 +128,12 @@ export const ArticleGeneratorPage: React.FC = () => {
           model,
         });
         setArticleHtml(result.html);
-        setSeoKeywords(result.seoKeywords);
+        const refreshedKeywords = result.seoKeywords.length > 0 ? result.seoKeywords : seoKeywords;
+        const refreshedSelectedKeyword =
+          (selectedKeyword && refreshedKeywords.includes(selectedKeyword) ? selectedKeyword : null) ??
+          refreshedKeywords[0] ??
+          null;
+        setSeoKeywords(refreshedKeywords);
         if (result.sources.length > 0) {
           setSources((current) => {
             const combined = [...current, ...result.sources];
@@ -137,8 +142,11 @@ export const ArticleGeneratorPage: React.FC = () => {
             );
           });
         }
-        setSelectedKeyword(null);
-        setMetaDescription(null);
+        setSelectedKeyword(refreshedSelectedKeyword);
+        setMetaDescription(
+          refreshedSelectedKeyword ? buildMetaDescription(refreshedSelectedKeyword, result.html) : null
+        );
+        setIsMetaCopied(false);
         setOptimizationPrompt("");
       } catch (err) {
         setOptimizationError(err instanceof Error ? err.message : "An unexpected error occurred.");
@@ -146,7 +154,7 @@ export const ArticleGeneratorPage: React.FC = () => {
         setIsOptimizing(false);
       }
     },
-    [articleHtml, optimizationPrompt, topic, model]
+    [articleHtml, optimizationPrompt, topic, model, seoKeywords, selectedKeyword]
   );
 
   const handleCopy = useCallback(async () => {
